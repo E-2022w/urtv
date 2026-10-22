@@ -3,6 +3,7 @@ package sa.urtv.screensaver;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -22,10 +23,11 @@ final class ScreenView {
         w.setVerticalScrollBarEnabled(false);
         w.setHorizontalScrollBarEnabled(false);
         w.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        final Context app = c.getApplicationContext();   // the client must not keep the dream or activity alive
         w.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
-                WebResourceResponse res = PhotoCache.serve(c, r.getUrl().toString());
+                WebResourceResponse res = PhotoCache.serve(app, r.getUrl().toString());
                 return res != null ? res : super.shouldInterceptRequest(v, r);
             }
         });
@@ -37,10 +39,18 @@ final class ScreenView {
         s.setAllowFileAccessFromFileURLs(true);
         s.setAllowUniversalAccessFromFileURLs(true);
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);   // photos are cached by PhotoCache, data must be fresh
-        if (android.os.Build.VERSION.SDK_INT >= 23) s.setOffscreenPreRaster(true);   // draw before it is shown
+        if (android.os.Build.VERSION.SDK_INT >= 23) s.setOffscreenPreRaster(false);   // the view is on screen from the start; no second raster of the page
         w.loadUrl(new Prefs(c).dashboardUrl(c));
-        UpdateJob.cancelOld(c);
-        Updater.checkIfDue(c.getApplicationContext());   // the page and version check runs here, once the last one is 6 hours old
+        UpdateJob.cancelOld(app);
+        Updater.checkIfDue(app);   // the page and version check runs here, once the last one is 6 hours old
         return w;
+    }
+
+    /** Takes the view out of its window and frees the WebView and everything it holds. */
+    static void release(WebView w) {
+        if (w == null) return;
+        w.stopLoading();
+        if (w.getParent() instanceof ViewGroup) ((ViewGroup) w.getParent()).removeView(w);
+        w.destroy();
     }
 }
