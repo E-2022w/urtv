@@ -39,7 +39,8 @@ final class ScreenView {
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);   // photos are cached by PhotoCache, data must be fresh
         if (android.os.Build.VERSION.SDK_INT >= 23) s.setOffscreenPreRaster(true);   // draw before it is shown
         w.loadUrl(new Prefs(c).dashboardUrl(c));
-        UpdateJob.schedule(c);
+        UpdateJob.cancelOld(c);
+        Updater.checkIfDue(c.getApplicationContext());   // the page and version check runs here, once the last one is 6 hours old
         return w;
     }
 }

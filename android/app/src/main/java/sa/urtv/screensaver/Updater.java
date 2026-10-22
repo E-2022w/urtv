@@ -27,6 +27,24 @@ final class Updater {
 
     static File pageFile(Context c) { return new File(c.getFilesDir(), "web/tv.html"); }
 
+    private static boolean running;
+
+    /** Screensaver start: look for a new page and version when the last check is 6 hours old. Returns at once. */
+    static void checkIfDue(final Context c) {
+        Prefs prefs = new Prefs(c);
+        if (!prefs.autoUpdate()) return;
+        if (System.currentTimeMillis() - prefs.raw().getLong("lastCheck", 0) < INTERVAL_MS) return;
+        synchronized (Updater.class) {
+            if (running) return;
+            running = true;
+        }
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try { check(c, false); } finally { synchronized (Updater.class) { running = false; } }
+            }
+        }).start();
+    }
+
     /** Blocking; call off the main thread. Returns an Arabic status line for the settings screen. */
     static synchronized String check(Context c, boolean force) {
         String msg = checkPage(c, force);

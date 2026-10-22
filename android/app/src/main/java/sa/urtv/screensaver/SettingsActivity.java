@@ -48,7 +48,6 @@ public class SettingsActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = new Prefs(this);
-        UpdateJob.schedule(this);
         ScrollView scroll = new ScrollView(this);
         scroll.setBackground(new android.graphics.drawable.GradientDrawable(
             android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0xFF0A2016, 0xFF04120C, 0xFF020806}));

@@ -109,7 +109,7 @@ Use the TV's clock or wait for the real moment; take a screenshot at each.
 |---|---|---|
 | F1 | Press A17 twice in a row | First «تم التحديث», second «الصفحة محدثة» (the page is cached and unchanged) |
 | F2 | Ask the developer to push a visible change (or note the latest commit), then A17 | Toast «تم التحديث»; preview shows the change |
-| F3 | `adb shell dumpsys jobscheduler \| grep -A3 urtv` | A periodic, persisted job listed |
+| F3 | `adb shell dumpsys jobscheduler \| grep -A3 urtv`, then start the screensaver (`optimize/start-saver.sh`) twice, a minute apart | No job listed (the old periodic one is cancelled). With التحديث التلقائي on and the last check over 6 hours old, the first start fetches the page once (`logcat` shows one request to raw.githubusercontent.com); the second does not. With it off, neither does |
 
 ## 7. Power cycle (TCL)
 
