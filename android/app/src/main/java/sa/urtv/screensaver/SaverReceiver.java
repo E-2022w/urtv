@@ -5,9 +5,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.provider.Settings;
 
+import java.text.ParsePosition;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The screensaver's settings from ADB, for agents (people use SettingsActivity). Only the shell can send
@@ -20,8 +23,11 @@ import java.util.List;
  *       [--es panel prayers] [--es home_panel none] [--es minrating 7] [--es genres Drama,Comedy] [--es langs English]
  *       [--es photos 30] [--es idle 10] [--es digits hindi|latin]
  *       [--es cardstyle current|dark1|glass1|dark3|glass3]
+ *       [--es slot matches|weather|fasting|countdown|none] [--es countdown 2026-12-01|clear --es cdname 'رحلة الصيف']
  *   am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.UPDATE
  *
+ * slot = what the bottom-left slot shows (Prefs.SLOTS). countdown = the date (YYYY-MM-DD) slot=countdown counts down to, or
+ * "clear"; cdname = its name (up to 40 characters).
  * cardstyle = the look of the card beside the clock (Prefs.CARD_STYLES; current is the plain card).
  * digits = hindi (١٢٣, as always) or latin (123). photos = minutes between background photos (Prefs.PHOTO_MINUTES). idle = minutes before the TV starts the
  * screensaver (Prefs.IDLE_MINUTES): this is the system's screen_off_timeout, which a receiver (it runs as this
@@ -115,6 +121,14 @@ public class SaverReceiver extends BroadcastReceiver {
         String cardStyle = i.getStringExtra("cardstyle");
         if (cardStyle != null && !isChoice(Prefs.CARD_STYLES, cardStyle))
             return "error: cardstyle is one of " + choices(Prefs.CARD_STYLES);
+        String slot = i.getStringExtra("slot");
+        if (slot != null && !isChoice(Prefs.SLOTS, slot))
+            return "error: slot is one of " + choices(Prefs.SLOTS);
+        String cd = i.getStringExtra("countdown"), cdName = i.getStringExtra("cdname");
+        if (cd != null && !"clear".equals(cd) && !isDate(cd))
+            return "error: countdown is a date like 2026-12-01, or clear";
+        if (cdName != null && cd == null) return "error: cdname goes with countdown DATE";
+        if (cdName != null && cdName.length() > 40) return "error: cdname is at most 40 characters";
         String idle = i.getStringExtra("idle");
         if (idle != null) {
             if (!Arrays.asList(Prefs.IDLE_MINUTES).contains(idle))
@@ -144,6 +158,11 @@ public class SaverReceiver extends BroadcastReceiver {
         if (photos != null) p.setPhotoMinutes(photos);
         if (digits != null) p.setDigits(digits);
         if (cardStyle != null) p.setCardStyle(cardStyle);
+        if (slot != null) p.setSlot(slot);
+        if (cd != null) {
+            if ("clear".equals(cd)) p.setCountdown("", "");
+            else p.setCountdown(cd, cdName == null ? "" : cdName.trim());
+        }
         if (genres != null) p.setList("genres", genres);
         if (langs != null) p.setList("langs", langs);
         return "saved\n" + describe(c, p);
@@ -158,6 +177,8 @@ public class SaverReceiver extends BroadcastReceiver {
             + "\nphotos: " + p.photoMinutes()
             + "\ndigits: " + p.digits()
             + "\ncardstyle: " + p.cardStyle()
+            + "\nslot: " + p.slot()
+            + "\ncountdown: " + (p.countdownDate().isEmpty() ? "none" : p.countdownDate() + " " + p.countdownName())
             + "\nidle: " + idle(Prefs.idleMs(c))
             + "\ngenres: " + Prefs.join(p.list("genres"), ",") + "\nlangs: " + Prefs.join(p.list("langs"), ",")
             + "\nautoupdate: " + p.autoUpdate();
@@ -167,6 +188,15 @@ public class SaverReceiver extends BroadcastReceiver {
     private static String idle(long ms) {
         if (ms <= 0) return "unknown";
         return ms % 60000 == 0 ? String.valueOf(ms / 60000) : (ms / 1000) + "s";
+    }
+
+    /** a real calendar date written YYYY-MM-DD */
+    private static boolean isDate(String v) {
+        if (!v.matches("\\d{4}-\\d{2}-\\d{2}")) return false;
+        SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        f.setLenient(false);
+        ParsePosition pos = new ParsePosition(0);
+        return f.parse(v, pos) != null && pos.getIndex() == v.length();
     }
 
     private static boolean isChoice(String[][] all, String v) {
