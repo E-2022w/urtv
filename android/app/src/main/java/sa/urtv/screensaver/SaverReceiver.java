@@ -18,6 +18,8 @@ import java.util.List;
  *       [--es city 'الرس'] [--es lat 25.86 --es lon 43.49] [--es teams '136013:Al-Hilal,150643:Al-Zulfi']
  *       [--es panel prayers] [--es home_panel none] [--es minrating 7] [--es genres Drama,Comedy] [--es langs English]
  *   am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.UPDATE
+ *   am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.TASKS
+ *       --es op list | add --es text 'نص' | done --ei n 1 | del --ei n 1 | clear
  *
  * The answer is in the "data" of am's output. Unknown values are refused with a message, nothing half-saved.
  */
@@ -52,6 +54,9 @@ public class SaverReceiver extends BroadcastReceiver {
             }
             case "sa.urtv.screensaver.SET":
                 setResultData(set(c, p, i));
+                return;
+            case "sa.urtv.screensaver.TASKS":
+                setResultData(tasks(p, i));
                 return;
             default:
                 setResultData("error: unknown action " + action);
@@ -110,6 +115,40 @@ public class SaverReceiver extends BroadcastReceiver {
         if (genres != null) p.setList("genres", genres);
         if (langs != null) p.setList("langs", langs);
         return "saved\n" + describe(p);
+    }
+
+    /** «المهام»: n is the number list shows (from 1, done ones included). */
+    private static String tasks(Prefs p, Intent i) {
+        String op = String.valueOf(i.getStringExtra("op"));
+        switch (op) {
+            case "list":
+                return listing(p);
+            case "add": {
+                String why = p.addTask(i.getStringExtra("text"));
+                return why != null ? "error: " + why : "saved\n" + listing(p);
+            }
+            case "done":
+            case "del": {
+                int n = i.getIntExtra("n", 0);
+                boolean ok = "done".equals(op) ? p.doneTask(n) : p.deleteTask(n);
+                return !ok ? "error: no task number " + n + " (list shows the numbers)"
+                    : "saved\n" + listing(p);
+            }
+            case "clear":
+                p.clearTasks();
+                return "saved\nno tasks";
+            default:
+                return "error: op is one of list add done del clear";
+        }
+    }
+
+    private static String listing(Prefs p) {
+        List<Prefs.Task> all = p.tasks();
+        if (all.isEmpty()) return "no tasks";
+        StringBuilder b = new StringBuilder();
+        for (int k = 0; k < all.size(); k++)
+            b.append(k + 1).append(all.get(k).done ? ". [done] " : ". ").append(all.get(k).text).append('\n');
+        return b.toString().trim();
     }
 
     private static String describe(Prefs p) {

@@ -14,6 +14,8 @@
 #   optimize/saver.sh langs Arabic,English         episodes card: English Arabic Korean Japanese Turkish Spanish
 #                                                  French Hindi German  ("" = all)
 #   optimize/saver.sh minrating 7                  episodes card: lowest rating shown: 0 6 6.5 7 7.5 8
+#   optimize/saver.sh tasks list                   «المهام» kept on the TV; N = the number list shows
+#   optimize/saver.sh tasks add 'نص'               (up to 12, 60 characters each)  |  done N  |  del N  |  clear
 #   optimize/saver.sh update                       download the latest screen now
 # Only ADB can change these (sa.urtv.screensaver/.SaverReceiver needs the shell's DUMP).
 set -euo pipefail
@@ -45,6 +47,18 @@ case "${1:-}" in
   genres)    send SET "--es genres $(quote "${2-}")" ;;
   langs)     send SET "--es langs $(quote "${2-}")" ;;
   minrating) send SET "--es minrating $(quote "${2:?usage: optimize/saver.sh minrating 7}")" ;;
+  tasks)
+    case "${2:-}" in
+      list)  send TASKS "--es op list" ;;
+      clear) send TASKS "--es op clear" ;;
+      add)   [ $# -eq 3 ] || { echo "usage: optimize/saver.sh tasks add 'نص'"; exit 1; }
+             text=$(quote "$3") || exit 1   # refuse before anything is sent
+             send TASKS "--es op add --es text $text" ;;
+      done|del)
+             [[ "${3:-}" =~ ^[0-9]+$ ]] || { echo "usage: optimize/saver.sh tasks $2 N   (N from 'tasks list')"; exit 1; }
+             send TASKS "--es op $2 --ei n $3" ;;
+      *) echo "usage: optimize/saver.sh tasks list | add 'نص' | done N | del N | clear"; exit 1 ;;
+    esac ;;
   find-team) shift; "$PY" -I optimize/find-team.py "$@" ;;   # Arabic or English name
-  *) sed -n '2,17p' "$0"; exit 1 ;;
+  *) sed -n '2,20p' "$0"; exit 1 ;;
 esac
