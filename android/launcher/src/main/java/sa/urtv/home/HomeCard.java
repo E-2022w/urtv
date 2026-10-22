@@ -43,12 +43,11 @@ final class HomeCard {
         if (want == null) { destroy(); return; }
         if (!want.equals(url)) { destroy(); create(want); }
         web.onResume();
-        web.resumeTimers();
     }
 
-    /** onPause: no timers or network while an app is in front. */
+    /** onPause: the page stops drawing and running while an app is in front (not pauseTimers, which is process-wide). */
     void pause() {
-        if (web != null) { web.onPause(); web.pauseTimers(); }
+        if (web != null) web.onPause();
     }
 
     void destroy() {
