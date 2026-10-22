@@ -131,6 +131,9 @@ Use the TV's clock or wait for the real moment; take a screenshot at each.
 | L8 | Long-press OK on any app → «ترتيب المفضلة…» (also: screensaver settings → «ترتيب التطبيقات المفضلة») | List of favourites, numbered, first one focused |
 | L9 | OK on the 3rd app, ▲ twice, OK; then Back | It turns gold, moves to the top, drops; home row shows it first |
 | L10 | «إزالة» beside an app (▶/◀ to reach it); then «+» on an app under «إضافة تطبيق» | Removed / added at the end; never below 5 or above 10 (a message says so) |
+| L12 | `optimize/saver.sh tasks add 'اشتري خبز'`, then press Home and the «المهام» pill | The pill is there; the list shows «اشتري خبز» with a gold dot; OK on it → «تم: اشتري خبز», it turns to ✓ |
+| L13 | In «المهام» press «تكلّم» and say «أضف مهمة موعد الطبيب» (a TV with a speech recognizer) | «أضيف «موعد الطبيب»؟» with نعم / لا; «لا» changes nothing, «نعم» adds it. Then «خلصت الطبيب» and «احذف الطبيب» each ask first |
+| L14 | Same on a TV with no recognizer | No «تكلّم» button; «الإدخال الصوتي غير متاح في هذا التلفزيون» once; OK and «حذف» still work |
 | L5 | `optimize/dock.sh apps`, then `optimize/dock.sh set <3 packages from that list>`, then `optimize/dock.sh show` | Home screen redraws at once with those three first, topped up to 5; `show` lists them |
 | L6 | `optimize/dock.sh set com.not.installed` | `error: none of these apps are on this TV's home screen`; row unchanged |
 | L7 | `optimize/dock.sh reset` | Row back to the defaults |
@@ -151,6 +154,7 @@ Use the TV's clock or wait for the real moment; take a screenshot at each.
 | T8 | `optimize/venv/bin/python -I optimize/random-clubs.py 8 1` | `seed: 1` and 8 names; the same on every run |
 | T9 | `optimize/reset.sh`, then `optimize/venv/bin/python -I optimize/tv.py pm list packages sa.urtv` and `optimize/venv/bin/python -I optimize/tv.py settings get secure screensaver_enabled` | The package list is empty; `screensaver_enabled` is the value in `optimize/run-*/backup.txt` (under «== screensaver»: the components line, then this one; `null` means unset) |
 | T10 | Put a `!!` line in `optimize/run/report.md` and run `optimize/run.sh` | It ends with «Done, with problems:» and that line, exit code 1; no «All steps done» |
+| T11 | `optimize/saver.sh tasks add 'اختبار'`, `tasks list`, `tasks done 1`, `tasks del 1`, `tasks del 9`, `tasks clear` | `saved` and the numbered list; `1. [done] اختبار`; `no tasks`; then `error: no task number 9 …` |
 
 ---
 
