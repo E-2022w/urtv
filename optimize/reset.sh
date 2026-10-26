@@ -59,6 +59,22 @@ tv "appops set sa.urtv.home SCHEDULE_EXACT_ALARM default" > /dev/null 2>&1 || tr
 for p in sa.urtv.home sa.urtv.screensaver sa.urtv.listening sa.yourtv.home sa.yourtv.screensaver com.abdullah.tvhome com.abdullah.tvsaver; do
   tv "pm uninstall $p" | grep -q Success && echo "   removed $p" || true
 done
+# the sleep service (an accessibility service dock.sh sleep-setup turned on): our entry leaves the list, nothing else does; the
+# switch is put back as dock.sh recorded it (null: deleted) only when no other service is left
+if [ -f "${URTV_RUN_DIR:-optimize/run}/accessibility-before.txt" ]; then
+  svcs=$(tv "settings get secure enabled_accessibility_services" | tail -n 1 | tr -d '\r' || true)
+  if [ -n "$svcs" ] && [ "$svcs" != null ]; then
+    rest=$(tr ':' '\n' <<< "$svcs" | grep -v '^sa\.urtv\.home/' | paste -sd: - || true)
+    if [ -n "$rest" ]; then echo "settings put secure enabled_accessibility_services $rest" | tv --batch > /dev/null
+    else
+      before=$(sed -n 's/^accessibility_enabled=//p' "${URTV_RUN_DIR:-optimize/run}/accessibility-before.txt" | head -n 1)
+      { echo "settings delete secure enabled_accessibility_services"
+        if [ "$before" = null ]; then echo "settings delete secure accessibility_enabled"
+        elif [[ "$before" =~ ^[0-9]+$ ]]; then echo "settings put secure accessibility_enabled $before"; fi
+      } | tv --batch > /dev/null
+    fi
+  fi
+fi
 # TV Bro and SmartTube: only if the setup put them there (not in the TV's package list saved before it)
 for p in com.phlox.tvwebbrowser org.smarttube.stable; do
   if [ -f optimize/run/backup.txt ] && ! grep -qx "package:$p" optimize/run/backup.txt; then
@@ -66,11 +82,12 @@ for p in com.phlox.tvwebbrowser org.smarttube.stable; do
   fi
 done
 
-echo "4/4 Tweaks back to Android's defaults…"
-optimize/tweaks.sh restore > /dev/null
-# tweaks.sh restore puts Android's defaults; where backup.sh recorded what this TV had (animation scales, the cached-apps
-# freezer, the cached-processes limit), that is put back instead (null: it was never set, so it is deleted)
-if [ -f optimize/run/backup.txt ]; then
+echo "4/4 Tweaks back to what the TV had…"
+from_journal=0; [ -f "${URTV_RUN_DIR:-optimize/run}/tweaks-journal.txt" ] && from_journal=1   # tweaks.sh keeps the TV's own values there
+{ optimize/tweaks.sh restore || echo "!! tweaks.sh restore failed: run optimize/tweaks.sh restore again"; } | grep '!!' || true
+# tweaks.sh restore puts Android's defaults when it has no journal; where backup.sh recorded what this TV had (animation scales,
+# the cached-apps freezer, the cached-processes limit), that is put back instead (null: it was never set, so it is deleted)
+if [ "${from_journal:-0}" != 1 ] && [ -f optimize/run/backup.txt ]; then
   section() { tr -d '\r' < optimize/run/backup.txt | awk -v want="$1" '/^== /{s=($2==want)} s&&!/^==/{print}'; }
   { read -r w t a <<< "$(section animation | head -n 3 | paste -sd' ' -)" || true
     for kv in "window_animation_scale ${w:-}" "transition_animation_scale ${t:-}" "animator_duration_scale ${a:-}"; do

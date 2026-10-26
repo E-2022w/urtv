@@ -19,7 +19,7 @@ os.chmod(fake, 0o755)
 failed = 0
 def run(*args, gets="null"):
     open(log, "w").close()
-    r = subprocess.run(["bash", dock, *args], capture_output=True, text=True, env={**os.environ, "PY": fake, "SENT": log, "GETS": gets})
+    r = subprocess.run(["bash", dock, *args], capture_output=True, text=True, env={**os.environ, "PY": fake, "SENT": log, "GETS": gets, "URTV_RUN_DIR": os.path.join(tmp, "run")})
     return r.returncode, r.stdout + r.stderr, open(log, encoding="utf-8").read().strip().split("\n")
 
 def check(name, ok, detail=""):
@@ -41,8 +41,9 @@ for bad, why in [("abc", "words"), ("-5", "a negative number"), ("1.5", "a fract
 SVC = "sa.urtv.home/sa.urtv.home.SleepService"
 rc, out, sent = run("sleep-setup")
 check("sleep-setup: nothing enabled yet: turns on the sleep service alone, and accessibility",
-      rc == 0 and sent == ["settings get secure enabled_accessibility_services", "settings put secure enabled_accessibility_services " + SVC,
-                           "settings put secure accessibility_enabled 1"], sent)
+      rc == 0 and sent == ["settings get secure enabled_accessibility_services; settings get secure accessibility_enabled",
+                           "settings put secure enabled_accessibility_services " + SVC, "settings put secure accessibility_enabled 1",
+                           "settings get secure enabled_accessibility_services"], sent)
 rc, out, sent = run("sleep-setup", gets="com.other/com.other.Svc")
 check("sleep-setup: another accessibility service is kept, ours added after it",
       rc == 0 and sent[1] == "settings put secure enabled_accessibility_services com.other/com.other.Svc:" + SVC, sent)
