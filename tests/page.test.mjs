@@ -1493,7 +1493,7 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
       const { p, ctx, errors } = await open('tv.html', hash, { width, height });
       await p.clock.setFixedTime(new Date(when));
       await p.evaluate(TIMES + ' renderPanel(false); tickPrayer();');
-      const r = await p.evaluate(() => ({ adj: CONFIG.prayerAdj.join(), maghrib: fmt12(...[PRAYERS.find(x => x.key === 'Maghrib')].map(x => [x.h, x.mi])[0]),
+      const r = await p.evaluate(() => ({ adj: CONFIG.prayerAdj.join(), maghrib: fmtTime(...[PRAYERS.find(x => x.key === 'Maghrib')].map(x => [x.h, x.mi])[0]),
         card: [...document.querySelectorAll('#week-list li')].map(l => l.textContent.replace(/\s+/g, ' ').trim()).find(t => t.startsWith('المغرب')) || '',
         panel: (document.getElementById('prayer-name').textContent + ' ' + document.getElementById('prayer-time').textContent).trim(), bar: adhanBarText() || '' }));
       const tag = `adj on the page, ${label}, ${width}x${height}${hash.includes('widget') ? ' card' : ''}`;
@@ -2936,11 +2936,11 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
     const t = computePrayers(), [mh, mm] = t.Maghrib.split(':').map(Number), [ih, im] = t.Isha.split(':').map(Number);
     buildPrayers(t); renderPanel(false);
     return { t, gap: (ih * 60 + im) - (mh * 60 + mm), rows: [...document.querySelectorAll('#week-list li')].map(li => li.textContent.replace(/\s+/g, ' ').trim()),
-             f: [fmt12(24, 14), fmt12(12, 0), fmt12(0, 5), fmt12(23, 59)] };
+             f: [fmtTime(24, 14), fmtTime(12, 0), fmtTime(0, 5), fmtTime(23, 59)] };
   });
   check('computePrayers: Isha is 90 minutes after Maghrib even past midnight (Oslo, midsummer)', r.gap === 90 && +r.t.Isha.slice(0, 2) >= 24, JSON.stringify(r.t));
   check('prayer times card: an Isha after midnight reads ١٢:١٤ ص', r.rows[5] && r.rows[5].includes('ص') && r.rows[5].startsWith('العشاء'), r.rows.join(' | '));
-  check('fmt12: 24:14 is 12:14 ص, noon م, 0:05 ص, 23:59 م', r.f.join() === '١٢:١٤ ص,١٢:٠٠ م,١٢:٠٥ ص,١١:٥٩ م', r.f.join());
+  check('fmtTime (the default, 12-hour): 24:14 is 12:14 ص, noon م, 0:05 ص, 23:59 م', r.f.join() === '١٢:١٤ ص,١٢:٠٠ م,١٢:٠٥ ص,١١:٥٩ م', r.f.join());
   check('computePrayers: no script errors', !errors.length, errors.join('; '));
   await ctx.close();
 }
@@ -3387,6 +3387,138 @@ for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
   }
 }
 
+
+// ---- «ساعة ٢٤»: #clock=24 writes every time of day as 24-hour («١٩:٣٠», the hour with two digits, no ص or م); no #clock, or anything but 24,
+// is the 12-hour clock, in exactly the words it had before. Every place that shows a time of day goes through one formatter (fmtTime / timeParts).
+{
+  const TIMES = "buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'19:15'});";
+  const GAME = { idEvent: 'g1', strHomeTeam: 'Al-Hilal', strAwayTeam: 'Al-Nassr', strTimestamp: '2026-10-24T18:16:00Z', strStatus: '1H', intHomeScore: '1', intAwayScore: '0' };
+  const strip = h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
+  // everything one mode shows at the instants given: [what, text], in this order
+  const probe = async (hash) => {
+    const out = [], errs = [];
+    // the clock face at four instants (Riyadh is UTC+3): 07:30, 00:30, 12:05, 18:05
+    for (const [iso, tag] of [['2026-10-24T04:30:00Z', '07:30'], ['2026-10-24T21:30:00Z', '00:30'], ['2026-10-24T09:05:00Z', '12:05'], ['2026-10-24T15:05:00Z', '18:05']]) {
+      const { p, ctx, errors } = await open('tv.html', 'panel=prayers&' + hash, { now: new Date(iso) });
+      out.push(['clock ' + tag, await p.evaluate(() => { const ap = document.getElementById('ck-ap');
+        return [document.getElementById('ck-h').textContent, document.getElementById('ck-m').textContent, document.querySelectorAll('#ck-h i').length,
+                document.querySelectorAll('#ck-m i').length, getComputedStyle(ap).display === 'none' ? '-' : ap.textContent].join('|'); })]);
+      errs.push(...errors); await ctx.close();
+    }
+    const { p, ctx, errors } = await open('tv.html', 'teams=136013&panel=prayers&' + hash);
+    const at = (iso) => p.clock.setFixedTime(new Date(iso));
+    // the prayer panel: the next prayer, then «حان الآن» (between the adhan and the iqama), then an Isha after midnight («24:30»)
+    await p.evaluate(TIMES);
+    const panel = () => p.evaluate(() => { tickPrayer(); return ['prayer-label', 'prayer-name', 'prayer-time'].map(i => document.getElementById(i).textContent).join('|'); });
+    await at('2026-10-24T13:40:00Z'); out.push(['panel next', await panel()]);
+    await at('2026-10-24T08:41:00Z'); out.push(['panel now', await panel()]);
+    await p.evaluate("buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'24:30'});");
+    await at('2026-10-24T17:00:00Z'); out.push(['panel Isha after midnight', await panel()]);
+    out.push(['fmtTime edges', await p.evaluate(() => [[0, 0], [0, 5], [11, 59], [12, 0], [13, 7], [23, 59], [24, 30], [25, 5]].map(([h, m]) => fmtTime(h, m)).join(' | '))]);
+    await p.evaluate(TIMES);
+    // the card of the day's times, the row of the five, «يومك»
+    await at('2026-10-24T13:40:00Z');
+    out.push(['card prayers', await p.evaluate(() => prayerRows().map(h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); }).join(' | '))]);
+    out.push(['card prayer row', await p.evaluate(() => prayerRowCard().rows[0].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())]);
+    out.push(['card today', await p.evaluate(() => todayCard().rows.join(' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').match(/الصلاة القادمة[^ ]* [^ ]+ · [^ ]+( [مص])?/)?.[0])]);
+    // the games: the line under an upcoming game, the short form, the block of an upcoming and of a live game, the card's live row, «آخر تحديث»
+    out.push(['matchWhen', await p.evaluate(g => matchWhen(new Date(g.strTimestamp)), GAME)]);
+    out.push(['matchWhenShort', await p.evaluate(g => { const d = new Date('2026-10-23T18:00:00Z'); return matchWhenShort(d, d - 2 * 864e5, false) + ' / ' + matchWhenShort(d, d + 864e5, true); }, GAME)]);
+    out.push(['game upcoming', await p.evaluate(g => { const d = Date.parse(g.strTimestamp); return gameBlock({ ...g, intHomeScore: null, intAwayScore: null }, d - 3 * 864e5).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); }, GAME)]);
+    out.push(['game live', await p.evaluate(g => { const d = Date.parse(g.strTimestamp); return gameBlock(g, d + 600000).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); }, GAME)]);
+    out.push(['live row', await p.evaluate(g => liveWhen(g).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(), GAME)]);
+    out.push(['liveStatus', await p.evaluate(g => liveStatus({ ...g, strStatus: 'NS' }, ar(fmtTime(21, 16))), GAME)]);
+    out.push(['fmtAgo', await p.evaluate(() => fmtAgo(Date.parse('2026-10-24T14:30:00Z')))]);
+    // the events (Formula 1, UFC…): «بدأ» and the day with the time
+    out.push(['event when', await p.evaluate(() => { const t = Date.parse('2026-10-25T12:00:00Z'), now = Date.parse('2026-10-24T09:00:00Z');
+      const a = eventWhen({ t, dateOnly: false }, now), b = eventWhen({ t, dateOnly: false }, t + 60000), c = eventWhen({ t, dateOnly: true }, now);
+      const s = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      return [s(a.text), s(a.row), s(b.text), s(c.text)].join(' | '); })]);
+    // Ramadan: iftar by day, the suhoor (imsak) at night, with the ص or م as its small unit
+    for (const [iso, tag] of [['2027-02-20T12:00:00Z', 'iftar'], ['2027-02-20T20:00:00Z', 'imsak']]) {
+      await p.evaluate(TIMES);
+      await at(iso);
+      out.push(['occasion ' + tag, await p.evaluate(() => { OCC_CACHE = { day: '', val: null }; tickOccasion();
+        return document.getElementById('occ-label').textContent + '|' + document.getElementById('occ-days').innerHTML.replace(/\s+/g, ' ').trim(); })]);
+    }
+    // the hours card: «٩ ص» … «٣ م», or «٠٩:٠٠»; across midnight and noon
+    for (const [iso, from] of [['2026-10-24T18:00:00Z', ['2026-10-24T22', '2026-10-24T23', '2026-10-25T00', '2026-10-25T01', '2026-10-25T02', '2026-10-25T03']],
+                               ['2026-10-24T05:00:00Z', ['2026-10-24T09', '2026-10-24T10', '2026-10-24T11', '2026-10-24T12', '2026-10-24T13', '2026-10-24T14']]]) {
+      await at(iso);
+      out.push(['hours ' + (from[0].endsWith('22') ? 'night' : 'noon'), await p.evaluate(f => { HOURLY = f.map(t => ({ t: t + ':00', code: 0, temp: 30 }));
+        return [...new DOMParser().parseFromString(hourlyRows()[0], 'text/html').querySelectorAll('.hc')].map(c => c.querySelector('b').textContent + ' ' + c.querySelector('i').textContent).join(' | '); }, from)]);
+    }
+    errs.push(...errors); await ctx.close();
+    return { out, errs };
+  };
+  const WANT12 = {   // exactly what the page said before the setting: ص and م, the hour with no zero in front
+    'clock 07:30': '٧|٣٠|1|2|ص', 'clock 00:30': '١٢|٣٠|2|2|ص', 'clock 12:05': '١٢|٠٥|2|2|م', 'clock 18:05': '٦|٠٥|1|2|م',
+    'panel next': 'الصلاة القادمة|المغرب|٥:٤٥ م', 'panel now': 'حان الآن|الظهر|١١:٤٠ ص', 'panel Isha after midnight': 'الصلاة القادمة|العشاء|١٢:٣٠ ص',
+    'fmtTime edges': '١٢:٠٠ ص | ١٢:٠٥ ص | ١١:٥٩ ص | ١٢:٠٠ م | ١:٠٧ م | ١١:٥٩ م | ١٢:٣٠ ص | ١:٠٥ ص',
+    'card prayers': 'الفجر٤:٥٠ ص | الشروق٦:٠٥ ص | الظهر١١:٤٠ ص | العصر٣:٠٠ م | المغرب٥:٤٥ م | العشاء٧:١٥ م',
+    'card prayer row': 'الفجر ٤:٥٠ ص الظهر ١١:٤٠ ص العصر ٣:٠٠ م المغرب ٥:٤٥ م العشاء ٧:١٥ م',
+    'card today': 'الصلاة القادمة المغرب · ٥:٤٥ م',
+    'matchWhen': 'السبت ٢٤ أكتوبر · ٩:١٦ م', 'matchWhenShort': 'الجمعة ٩:٠٠ م / ٢٣ أكتوبر',
+    'game upcoming': 'الهلال × النصر بعد ٣ أيام السبت ٢٤ أكتوبر · ٩:١٦ م', 'game live': null,
+    'live row': 'مباشر · بدأت ٩:١٦ م', 'liveStatus': 'بدأت ٩:١٦ م', 'fmtAgo': 'آخر تحديث ٥:٣٠ م',
+    'event when': 'الأحد · ٣:٠٠ م | الأحد ٣:٠٠ م | مباشر · بدأ ٣:٠٠ م | الأحد',
+    'occasion iftar': 'الإفطار|٥:٤٥ <span class="unit">م</span>', 'occasion imsak': 'الإمساك|٤:٥٠ <span class="unit">ص</span>',
+    'hours night': '١٠ م ٣٠° | ١١ م ٣٠° | ١٢ ص ٣٠° | ١ ص ٣٠° | ٢ ص ٣٠° | ٣ ص ٣٠°', 'hours noon': '٩ ص ٣٠° | ١٠ ص ٣٠° | ١١ ص ٣٠° | ١٢ م ٣٠° | ١ م ٣٠° | ٢ م ٣٠°',
+  };
+  const WANT24 = {   // the same places, 24-hour
+    'clock 07:30': '٠٧|٣٠|2|2|-', 'clock 00:30': '٠٠|٣٠|2|2|-', 'clock 12:05': '١٢|٠٥|2|2|-', 'clock 18:05': '١٨|٠٥|2|2|-',
+    'panel next': 'الصلاة القادمة|المغرب|١٧:٤٥', 'panel now': 'حان الآن|الظهر|١١:٤٠', 'panel Isha after midnight': 'الصلاة القادمة|العشاء|٠٠:٣٠',
+    'fmtTime edges': '٠٠:٠٠ | ٠٠:٠٥ | ١١:٥٩ | ١٢:٠٠ | ١٣:٠٧ | ٢٣:٥٩ | ٠٠:٣٠ | ٠١:٠٥',
+    'card prayers': 'الفجر٠٤:٥٠ | الشروق٠٦:٠٥ | الظهر١١:٤٠ | العصر١٥:٠٠ | المغرب١٧:٤٥ | العشاء١٩:١٥',
+    'card prayer row': 'الفجر ٠٤:٥٠ الظهر ١١:٤٠ العصر ١٥:٠٠ المغرب ١٧:٤٥ العشاء ١٩:١٥',
+    'card today': 'الصلاة القادمة المغرب · ١٧:٤٥',
+    'matchWhen': 'السبت ٢٤ أكتوبر · ٢١:١٦', 'matchWhenShort': 'الجمعة ٢١:٠٠ / ٢٣ أكتوبر',
+    'game upcoming': 'الهلال × النصر بعد ٣ أيام السبت ٢٤ أكتوبر · ٢١:١٦', 'game live': null,
+    'live row': 'مباشر · بدأت ٢١:١٦', 'liveStatus': 'بدأت ٢١:١٦', 'fmtAgo': 'آخر تحديث ١٧:٣٠',
+    'event when': 'الأحد · ١٥:٠٠ | الأحد ١٥:٠٠ | مباشر · بدأ ١٥:٠٠ | الأحد',
+    'occasion iftar': 'الإفطار|١٧:٤٥', 'occasion imsak': 'الإمساك|٠٤:٥٠',
+    'hours night': '٢٢:٠٠ ٣٠° | ٢٣:٠٠ ٣٠° | ٠٠:٠٠ ٣٠° | ٠١:٠٠ ٣٠° | ٠٢:٠٠ ٣٠° | ٠٣:٠٠ ٣٠°', 'hours noon': '٠٩:٠٠ ٣٠° | ١٠:٠٠ ٣٠° | ١١:٠٠ ٣٠° | ١٢:٠٠ ٣٠° | ١٣:٠٠ ٣٠° | ١٤:٠٠ ٣٠°',
+  };
+  const same = {};
+  for (const [hash, on] of [['', false], ['clock=12', false], ['clock=24x', false], ['clock=1', false], ['clock=24', true]]) {
+    const { out, errs } = await probe(hash);
+    same[hash] = JSON.stringify(out);
+    const want = on ? WANT24 : WANT12;
+    check(`clock ${hash || '(none)'}: no script errors`, !errs.length, errs.join('; '));
+    for (const [what, got] of out) {
+      if (want[what] === null) continue;
+      check(`clock ${hash || '(none)'}: ${what} is ${on ? '24-hour' : 'the 12-hour one as before'}`, got === want[what], `${got}   wanted   ${want[what]}`);
+    }
+    // the live game's block: «مباشر · بدأت …» with the score
+    const live = out.find(x => x[0] === 'game live')[1];
+    check(`clock ${hash || '(none)'}: a live game starts «بدأت ${on ? '٢١:١٦' : '٩:١٦ م'}»`, live.includes('بدأت ' + (on ? '٢١:١٦' : '٩:١٦ م')) && (on ? !/[٠-٩] [صم]/.test(live) : !live.includes('٢١:١٦')), live);
+  }
+  check('clock: nothing, 12, 24x and 1 all give the same screen as before (the default)', new Set(['', 'clock=12', 'clock=24x', 'clock=1'].map(h => same[h])).size === 1);
+  // latin digits follow, and the clock keeps one box per digit
+  {
+    const { p, ctx, errors } = await open('tv.html', 'clock=24&digits=latin', { now: new Date('2026-10-24T04:30:00Z') });
+    const r = await p.evaluate(() => ({ t: document.getElementById('ck-h').textContent + ':' + document.getElementById('ck-m').textContent, f: fmtTime(24, 30), g: matchWhen(new Date('2026-10-24T18:16:00Z')) }));
+    check('clock=24 with digits=latin: 07:30, 00:30, 21:16', !errors.length && r.t === '07:30' && r.f === '00:30' && r.g.endsWith('· 21:16'), JSON.stringify(r));
+    await ctx.close();
+  }
+  // the 24-hour clock is not wider than the 12-hour one with its ص: nothing off screen, the hour has two digits beside the minutes
+  for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
+    for (const iso of ['2026-10-24T04:30:00Z', '2026-10-24T20:48:00Z']) {
+      const { p, ctx, errors } = await open('tv.html', 'clock=24&panel=prayers', { width: w, height: h, now: new Date(iso) });
+      const r = await p.evaluate(() => { const c = document.querySelector('.clock').getBoundingClientRect(), b = [...document.querySelectorAll('.clock .d, .clock .sep')].map(e => e.getBoundingClientRect());
+        return { left: c.left, right: c.right, vw: innerWidth, ordered: b.every((x, i) => !i || x.right <= b[i - 1].left + 2 || x.left >= b[i - 1].right - 2), n: document.querySelectorAll('.clock i').length }; });
+      check(`clock=24 ${w}x${h} at ${iso.slice(11, 16)}Z: four boxes, inside the screen`, !errors.length && r.n === 4 && r.left >= 0 && r.right <= r.vw, JSON.stringify(r) + errors.join('; '));
+      await ctx.close();
+    }
+  }
+  // the launcher's card and the screensaver's page both carry it: the same formatter, no second spelling of ص and م
+  {
+    const src = readFileSync(path.join(ROOT, 'src/template.html'), 'utf8');
+    const count = re => (src.match(re) || []).length;
+    check('clock: the page spells ص / م and the 12-hour hour in two places only (timeParts, the clock face)', count(/\? 'ص' : 'م'/g) === 2 && count(/=== 0 \? 12 :/g) === 2, `${count(/\? 'ص' : 'م'/g)} ${count(/=== 0 \? 12 :/g)}`);
+    check('clock: no fmt12 left anywhere in the page', !/fmt12/.test(src));
+  }
+}
 
 // ---- «يُتلى الآن» on the screensaver: while the Quran or a station plays in the launcher (window.UrtvNative.nowPlaying(), mocked here) a small
 // card at the top centre says «يُتلى الآن · سورة الكهف · ماهر المعيقلي», in the style of the card beside the clock; it goes when the answer is empty
