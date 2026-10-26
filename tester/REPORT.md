@@ -22,4 +22,12 @@ TUNISIA 18 {'Fajr': 18, 'Isha': 18} None
 ALGERIA 19 {'Fajr': 18, 'Isha': 17} None
 MOROCCO 21 {'Fajr': 19, 'Isha': 17} None
 JORDAN 23 {'Fajr': 18, 'Maghrib': '5 min', 'Isha': 18} None
+algiers {'Fajr': '05:42', 'Sunrise': '07:09', 'Dhuhr': '12:31', 'Asr': '15:30', 'Maghrib': '17:53', 'Isha': '19:15'}
+amman {'Fajr': '05:29', 'Sunrise': '06:51', 'Dhuhr': '12:20', 'Asr': '15:26', 'Maghrib': '17:54', 'Isha': '19:11'}
+beirut {'Fajr': '04:24', 'Sunrise': '05:55', 'Dhuhr': '11:22', 'Asr': '14:25', 'Maghrib': '16:47', 'Isha': '18:09'}
+cairo {'Fajr': '04:40', 'Sunrise': '06:07', 'Dhuhr': '11:39', 'Asr': '14:47', 'Maghrib': '17:10', 'Isha': '18:28'}
+casablanca {'Fajr': '05:19', 'Sunrise': '06:47', 'Dhuhr': '12:19', 'Asr': '15:18', 'Maghrib': '17:45', 'Isha': '18:59'}
+damascus {'Fajr': '05:21', 'Sunrise': '06:52', 'Dhuhr': '12:19', 'Asr': '15:22', 'Maghrib': '17:45', 'Isha': '19:06'}
+hebron {'Fajr': '04:25', 'Sunrise': '05:54', 'Dhuhr': '11:23', 'Asr': '14:30', 'Maghrib': '16:52', 'Isha': '18:12'}
+tunis {'Fajr': '05:14', 'Sunrise': '06:41', 'Dhuhr': '12:03', 'Asr': '15:02', 'Maghrib': '17:24', 'Isha': '18:52'}
 ```
