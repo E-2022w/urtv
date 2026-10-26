@@ -14,13 +14,13 @@ public final class PrayerMethodRun {
         check("parse: anything else is null", PrayerMethod.parse("shia") == null && PrayerMethod.parse("") == null && PrayerMethod.parse(null) == null && PrayerMethod.parse("4") == null, "");
         check("fragment: nothing for auto (the page is then as it was), #pm=jafari for the Ja'fari",
                 PrayerMethod.fragment("auto").isEmpty() && PrayerMethod.fragment(null).isEmpty() && "&pm=jafari".equals(PrayerMethod.fragment("jafari")), "");
-        check("search: Saudi Arabia and the five other Gulf states, nothing else",
+        check("search: Saudi Arabia and the five other Gulf states",
                 PrayerMethod.searchable("SA") && PrayerMethod.searchable("bh") && PrayerMethod.searchable("KW") && PrayerMethod.searchable("QA")
                 && PrayerMethod.searchable("AE") && PrayerMethod.searchable("OM") && !PrayerMethod.searchable("EG") && !PrayerMethod.searchable("") && !PrayerMethod.searchable(null), "");
         check("label: auto names the country's calculation by the zone; the Ja'fari names itself",
                 PrayerMethod.label("auto", "Asia/Riyadh").equals("تلقائي · أم القرى") && PrayerMethod.label("auto", "Asia/Kuwait").equals("تلقائي · الكويت")
                 && PrayerMethod.label("auto", "Asia/Qatar").equals("تلقائي · قطر") && PrayerMethod.label("auto", "Asia/Dubai").equals("تلقائي · الإمارات")
-                && PrayerMethod.label("auto", "Asia/Bahrain").equals("تلقائي · الخليج") && PrayerMethod.label("jafari", "Asia/Kuwait").startsWith("جعفري"), "");
+                && PrayerMethod.label("auto", "Asia/Bahrain").equals("تلقائي · الخليج") && PrayerMethod.label("auto", "Africa/Cairo").equals("تلقائي · الهيئة المصرية للمساحة") && PrayerMethod.label("jafari", "Asia/Kuwait").startsWith("جعفري"), "");
         // the Gulf cities of the list
         int gulf = 0;
         java.util.Set<String> names = new java.util.HashSet<>();

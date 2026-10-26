@@ -30,6 +30,8 @@ final class PrayerMath {
      *   9  Kuwait: Fajr 18°, Isha 17.5°
      *  10  Qatar: Fajr 18°, Isha 90 minutes after Maghrib
      *  16  Dubai (the UAE's General Authority of Islamic Affairs): Fajr 18.2°, Isha 18.2°, sunrise −3, Dhuhr, Asr and Maghrib +3 minutes
+     *   5  Egypt, the Egyptian General Authority of Survey: Fajr 19.5°, Isha 17.5° (praytimes.org/docs/methods and the ITL library's
+     *      method-info list the same angles; Aladhan's id 5 is this authority)
      * Asr is the shadow-length-one (Shafi'i) Asr for all of them; Maghrib is sunset (0.833°) except for the Ja'fari.
      */
     static final class Method {
@@ -45,7 +47,7 @@ final class PrayerMath {
         boolean ishaIsDelay() { return ishaMinutes > 0; }
     }
 
-    static final int JAFARI = 0, UMM_AL_QURA = 4, GULF = 8, KUWAIT = 9, QATAR = 10, DUBAI = 16;
+    static final int JAFARI = 0, UMM_AL_QURA = 4, GULF = 8, KUWAIT = 9, QATAR = 10, DUBAI = 16, EGYPT = 5;
     private static final Method[] METHODS = {
         new Method(JAFARI, 16, 14, 0, 4),
         new Method(UMM_AL_QURA, 18.5, 0, 90, .833),
@@ -53,6 +55,7 @@ final class PrayerMath {
         new Method(KUWAIT, 18, 17.5, 0, .833),
         new Method(QATAR, 18, 0, 90, .833),
         new Method(DUBAI, 18.2, 18.2, 0, .833, -3, 3, 3, 3),
+        new Method(EGYPT, 19.5, 17.5, 0, .833),
     };
 
     static Method method(int id) {
@@ -73,6 +76,7 @@ final class PrayerMath {
             case "Asia/Qatar": return QATAR;
             case "Asia/Dubai": return DUBAI;
             case "Asia/Bahrain": case "Asia/Muscat": return GULF;
+            case "Africa/Cairo": return EGYPT;
             default: return UMM_AL_QURA;
         }
     }

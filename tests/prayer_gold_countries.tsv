@@ -1,0 +1,11 @@
+# Other countries' cities, from an independent solar calculation (NOAA/Meeus series, not the app's own formula) with the country's parameters; the app must agree within a minute. name, date, lat, lon, zone, then fajr sunrise dhuhr asr maghrib isha. Not an official timetable.
+Cairo	2026-06-21	30.0444	31.2357	Africa/Cairo	04:08 05:54 12:57 16:32 19:59 21:33
+Cairo	2026-10-23	30.0444	31.2357	Africa/Cairo	05:35 07:02 12:39 15:51 18:16 19:34
+Cairo	2026-12-21	30.0444	31.2357	Africa/Cairo	05:14 06:47 11:53 14:41 16:59 18:22
+Alexandria	2026-06-21	31.2001	29.9187	Africa/Cairo	04:08 05:57 13:02 16:41 20:07 21:43
+Alexandria	2026-10-23	31.2001	29.9187	Africa/Cairo	05:40 07:09 12:45 15:55 18:20 19:39
+Alexandria	2026-12-21	31.2001	29.9187	Africa/Cairo	05:21 06:55 11:58 14:44 17:02 18:26
+Aswan	2026-06-21	24.0889	32.8998	Africa/Cairo	04:25 06:01 12:50 16:09 19:39 21:04
+Aswan	2026-10-23	24.0889	32.8998	Africa/Cairo	05:27 06:50 12:33 15:49 18:15 19:29
+Aswan	2026-12-21	24.0889	32.8998	Africa/Cairo	04:59 06:27 11:46 14:46 17:06 18:24
+Cairo	2026-10-30	30.0444	31.2357	Africa/Cairo	04:39 06:07 11:39 14:46 17:10 18:28

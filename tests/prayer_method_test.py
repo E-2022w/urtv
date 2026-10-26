@@ -19,6 +19,8 @@ def check(name, ok, detail=""):
     failed += not ok
 
 
+EXPECTED_METHODS = 7   # Ja'fari, Umm al-Qura, the four Gulf ones, Egypt
+EXPECTED_ZONES = 6   # the zones that have a method of their own: the Gulf's five, Cairo
 # the page: CONFIG.prayerMethod = pm=jafari ? 0 : ({'Asia/Kuwait':9, ...})[zone] || 4
 tpl = (ROOT / "src/template.html").read_text(encoding="utf-8")
 m = re.search(r"CONFIG\.prayerMethod = _Q\.get\('pm'\) === 'jafari' \? 0\s*:\s*\(\{([^}]*)\}\)\[CONFIG\.timezone\] \|\| 4;", tpl)
@@ -30,10 +32,11 @@ pm_src = (ROOT / "android/launcher/src/main/java/sa/urtv/home/tilawah/PrayerMath
 body = pm_src[pm_src.index("static int methodFor"):]
 body = body[:body.index("\n    }\n")]
 launcher = {}
+ids = {n: int(v) for n, v in re.findall(r"(\w+) = (\d+)", re.search(r"static final int JAFARI = [^;]*;", pm_src).group(0))}   # the launcher's names for the ids
 for labels, const in re.findall(r"((?:case \"[A-Za-z_/]+\": )+)return ([A-Z_]+);", body):
     for z in re.findall(r'"([A-Za-z_/]+)"', labels):
-        launcher[z] = {"KUWAIT": 9, "QATAR": 10, "DUBAI": 16, "GULF": 8}[const]
-check("launcher and page give every Gulf zone the same method", launcher == page and len(page) == 5, f"{launcher} vs {page}")
+        launcher[z] = ids[const]
+check("launcher and page give every zone the same method", launcher == page and len(page) == EXPECTED_ZONES, f"{launcher} vs {page}")
 
 # the app: the label each zone gets
 app_src = (ROOT / "android/app/src/main/java/sa/urtv/screensaver/PrayerMethod.java").read_text(encoding="utf-8")
@@ -41,17 +44,16 @@ labels = {}
 for zs, label in re.findall(r"((?:case \"[A-Za-z_/]+\": )+)return \"([^\"]+)\";", app_src):
     for z in re.findall(r'"([A-Za-z_/]+)"', zs):
         labels[z] = label
-by_id = {9: "الكويت", 10: "قطر", 16: "الإمارات", 8: "الخليج"}
-check("the app names the same five zones, one label per method", {z: l for z, l in labels.items()} == {z: by_id[i] for z, i in page.items()}, f"{labels}")
+by_id = {9: "الكويت", 10: "قطر", 16: "الإمارات", 8: "الخليج", 5: "الهيئة المصرية للمساحة"}
+check("the app names the same zones, one label per method", {z: l for z, l in labels.items()} == {z: by_id[i] for z, i in page.items()}, f"{labels}")
 
 # every method the page and the launcher know has the same parameters in both
 js = re.findall(r"^\s+(\d+):\s*\{fajr:([\d.]+),\s*isha:([\d.]+),\s*ishaMin:(\d+),\s*maghrib:([\d.]+),\s*tune:\[([-\d,]+)\]\}", tpl, re.M)
 jv = {int(i): (float(f), float(ia), int(im), float(mg), tuple(int(x) for x in t.split(","))) for i, f, ia, im, mg, t in js}
 jl = {}
 for mid, fa, ia, im, mg, tune in re.findall(r"new Method\((\w+), ([\d.]+), ([\d.]+), (\d+), ([\d.]+)((?:, -?\d+)*)\)", pm_src):
-    ids = {"JAFARI": 0, "UMM_AL_QURA": 4, "GULF": 8, "KUWAIT": 9, "QATAR": 10, "DUBAI": 16}
     jl[ids[mid]] = (float(fa), float(ia), int(im), float(mg), tuple(int(x) for x in tune.replace(" ", "").split(",") if x) or (0, 0, 0, 0))
-check("page and launcher have the same six methods with the same angles, delays and margins", len(jv) == 6 and jv == jl, f"{jv}\n{jl}")
+check("page and launcher have the same methods with the same angles, delays and margins", len(jv) == EXPECTED_METHODS and jv == jl, f"{jv}\n{jl}")
 
 if shutil.which("javac"):
     src = ROOT / "android/app/src/main/java/sa/urtv/screensaver"
