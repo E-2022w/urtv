@@ -88,13 +88,15 @@ final class HomeCard {
             if (!guard.mayCreate(System.currentTimeMillis())) return;   // its renderer keeps dying: the cards stay off for now
             create(want);
         }
-        web.onResume();   // not resumeTimers(), which is process-wide
+        web.onResume();
+        web.resumeTimers();
     }
 
-    /** onPause: this view only; not pauseTimers(), which is process-wide (every WebView of the launcher process). */
+    /** onPause: no timers or network while an app is in front. pauseTimers()/resumeTimers() are process-wide: safe here only because this card is the
+     *  launcher's only WebView (tests/home_card_test.py checks it), so whoever adds a second WebView has to revisit both. */
     void pause() {
         resumed = false;
-        if (web != null) web.onPause();
+        if (web != null) { web.onPause(); web.pauseTimers(); }
     }
 
     void destroy() {
