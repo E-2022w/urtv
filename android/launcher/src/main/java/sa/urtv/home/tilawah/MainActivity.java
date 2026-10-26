@@ -358,7 +358,7 @@ public class MainActivity extends Activity {
                 PrayerTimes.Next next = PrayerTimes.next(MainActivity.this);
                 for (int prayer : PrayerTimes.PRAYERS) {
                     boolean isNext = next != null && next.index == prayer;
-                    String detail = PrayerTimes.clock12(times.clock[prayer]);
+                    String detail = PrayerTimes.clockText(times.clock[prayer]);
                     if (isNext) detail += "  •  " + PrayerTimes.remaining(next.at - System.currentTimeMillis());
                     rows.add(new Row(false, KIND_PRAYER, PrayerTimes.NAMES[prayer], detail, prayer, isNext));
                 }

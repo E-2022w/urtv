@@ -967,7 +967,7 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- status
 
     // The two date formats are made once and given the city's zone when it changes: the tick runs every minute.
-    private android.icu.text.SimpleDateFormat hijriFormat;
+    private android.icu.text.SimpleDateFormat hijriFormat, hijriWeekday, hijriDay;
     private SimpleDateFormat gregFormat;
     private String formatZone = "";
 
@@ -982,9 +982,10 @@ public class MainActivity extends Activity {
         Calendar now = ClockZone.at(ms, tz);   // the city's time, like the prayer times beside it
         int h = now.get(Calendar.HOUR_OF_DAY);
         greetingLine.update(h, cfg);
-        int hh = h % 12 == 0 ? 12 : h % 12;   // always 12-hour
-        clock.setText(arabicDigits(hh + ":" + String.format(Locale.ROOT, "%02d", now.get(Calendar.MINUTE))));
-        ampm.setText(h < 12 ? "ص" : "م");
+        boolean h24 = cfg.clock24();   // «ساعة ٢٤»: off (12-hour with the ص or م) unless the owner turned it on
+        clock.setText(ClockText.face(h, now.get(Calendar.MINUTE), h24, Digits.latin()));
+        ampm.setText(ClockText.suffix(h, h24));
+        ampm.setVisibility(h24 ? View.GONE : View.VISIBLE);
         String cal = zone == null ? "" : ClockZone.calendar(zone[1], zone[2]);
         boolean other = zone != null && ClockZone.showLine(ClockZone.differs(tvTz, tz, ms), cal);
         zoneLine.setVisibility(other ? View.VISIBLE : View.GONE);
@@ -993,16 +994,24 @@ public class MainActivity extends Activity {
             gregFormat = new SimpleDateFormat("d MMMM", new Locale("ar"));
             try {
                 hijriFormat = new android.icu.text.SimpleDateFormat("EEEE، d MMMM y", new android.icu.util.ULocale("ar_SA@calendar=islamic-umalqura"));
+                hijriDay = new android.icu.text.SimpleDateFormat("d MMMM y", new android.icu.util.ULocale("ar_SA@calendar=islamic-umalqura"));
             } catch (Exception ignored) { }
         }
         if (!tz.equals(formatZone)) {
             gregFormat.setTimeZone(java.util.TimeZone.getTimeZone(tz));
             if (hijriFormat != null) hijriFormat.setTimeZone(android.icu.util.TimeZone.getTimeZone(tz));
+            if (hijriDay != null) hijriDay.setTimeZone(android.icu.util.TimeZone.getTimeZone(tz));
             formatZone = tz;
         }
         String hijri = "";
         try {
-            if (hijriFormat != null) hijri = hijriFormat.format(now.getTime()).replaceAll("\\s*هـ\\s*$", "") + " هـ";
+            int shift = HijriShift.fromFragment(cfg.fragment);   // «فرق التاريخ الهجري»: 0 unless the settings say so
+            if (hijriFormat != null && shift == 0) hijri = hijriFormat.format(now.getTime()).replaceAll("\\s*هـ\\s*$", "") + " هـ";
+            else if (hijriFormat != null) {   // the day, month and year move by the offset; the weekday is today's
+                if (hijriWeekday == null) hijriWeekday = new android.icu.text.SimpleDateFormat("EEEE", new android.icu.util.ULocale("ar_SA@calendar=islamic-umalqura"));
+                hijriWeekday.setTimeZone(android.icu.util.TimeZone.getTimeZone(tz));
+                hijri = hijriWeekday.format(now.getTime()) + "، " + hijriDay.format(HijriShift.date(now, shift)).replaceAll("\\s*هـ\\s*$", "") + " هـ";
+            }
         } catch (Exception ignored) { }
         String greg = gregFormat.format(now.getTime());
         date.setText(arabicDigits(hijri.isEmpty() ? greg : hijri + "  –  " + greg));
