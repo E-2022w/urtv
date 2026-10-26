@@ -966,8 +966,28 @@ const ADHAN_BAR_MIN = 10;
 // «٤ دقائق»: what is left to an adhan, in the same words at the same second on the bar and in the panel below (whole minutes of the
 // rounded second; never less than one)
 const untilAdhan = leftMin => humanRemaining(Math.max(60, Math.round(leftMin * 60)));
+// while the adhan plays in the launcher (the screensaver only: window.UrtvNative.adhan() answers {"live":true,"prayer":4,"any":false}, "" otherwise)
+// the bar names it and says how to stop it: «أذان المغرب  ·  أي زر يوقف الأذان» (the default; «اختيار: إيقاف الأذان» when «إيقاف الأذان بأي زر» is off). The same words
+// as the launcher's bar (AdhanBarText.playing). Any key (or only OK, when the setting is off) is handled by the app, which also keeps the dream open.
+let ADHAN_LIVE = null;
+const ADHAN_PRAYER_NAMES = {0:'الفجر', 2:'الظهر', 3:'العصر', 4:'المغرب', 5:'العشاء'};
+function adhanLiveText(){
+  if(!ADHAN_LIVE) return '';
+  const n = ADHAN_LIVE.prayer === 2 && isFriday() ? 'الجمعة' : ADHAN_PRAYER_NAMES[ADHAN_LIVE.prayer];
+  return (n ? 'أذان ' + n : 'الأذان') + '  ·  ' + (ADHAN_LIVE.any ? 'أي زر يوقف الأذان' : 'اختيار: إيقاف الأذان');
+}
+function adhanLiveTick(){
+  if(CONFIG.widget || !CONFIG.adhanBar || !(window.UrtvNative && window.UrtvNative.adhan)) return;
+  // asked every 3 s whenever the app answers (a call to the app's provider, about a millisecond): an adhan started by hand has no time to wait for
+  let s = null;
+  try{ const raw = window.UrtvNative.adhan(); s = raw ? JSON.parse(raw) : null; }catch(e){}
+  ADHAN_LIVE = s && s.live && typeof s.prayer === 'number' && isFinite(s.prayer) ? {prayer: +s.prayer, any: !!s.any} : null;
+  tickAdhanBar();
+}
 function adhanBarText(){
-  if(!CONFIG.adhanBar || !PRAYERS.length) return '';
+  if(!CONFIG.adhanBar) return '';
+  if(ADHAN_LIVE) return adhanLiveText();
+  if(!PRAYERS.length) return '';
   const p = riyadhParts(), mins = p.h*60 + p.mi + p.s/60;
   for(const x of PRAYERS){
     const at = x.h*60 + x.mi, toAdhan = at - mins;
@@ -3262,6 +3282,7 @@ function boot(){
 
   nowPlayingTick();
   setInterval(nowPlayingTick, 60*1000);
+  setInterval(adhanLiveTick, 3000);
   setInterval(tickClock, 1000);
   setInterval(()=>{ tickDates(); tickPrayer(); tickOccasion(); wxExpire(); wxSource(); if(!SLOT_MATCHES) renderSlot(); }, 15000);
   if(SLOT_MATCHES){   // the matches timers run only while the slot shows matches
