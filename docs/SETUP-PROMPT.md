@@ -221,6 +221,8 @@ Lines starting with `!!` are the scripts telling you to stop and act. These are 
 | `--probe` silent for 5 minutes and the TV shows no «Allow USB debugging?» | the first connection to a TCL sometimes just hangs | stop it and run the same command again: the second time it connects at once |
 | `--probe` times out and the TV shows no «Allow USB debugging?» after a new clone of the repo | the ADB key the TV trusted stayed in the older folder's `optimize/adbkey`; a new clone makes a new key and the TV never saw it | the key now lives outside any clone, in `~/.urtv` (Windows: `%USERPROFILE%\.urtv`), and `tv.py` moves an older `optimize/adbkey` there by itself. If the older folder is not the one you are in, copy its `optimize/adbkey/adbkey` and `adbkey.pub` into `~/.urtv`, then the same command. Never print or paste that path: it holds my user name. The saved TV (`tv-id.json`) is there too |
 | `reset.sh`: `mv: cannot move 'optimize/run' … Permission denied` (Windows) | something holds a file open inside `optimize/run` (a log you write there, an editor, an image viewer) | close it, never write your own logs into `optimize/run`; the same command again (the apps are already removed, it carries on) |
+| `!! The import failed (…). The TV was put back as it was` (`saver.sh import --yes`) | the TV refused one of the values, or did not show it when read back; everything was put back | nothing changed: read the reason in the line, fix the file (or update the apps: `optimize/install.sh`), then the same command |
+| `!! The import failed (…) and the TV could NOT be put back completely` | the TV refused the put-back too (it went off, or its apps are older) | `optimize/saver.sh import optimize/run/settings-before-import.json --yes` (the path is in the line), and if that fails too, `optimize/saver.sh show` and set the rest with the commands in `docs/SETTINGS.md` |
 | `!! This terminal cannot reach the home network` | your commands run in a cloud, sandbox or virtual machine | stop, tell me (step 0) |
 | the TV forgot its Wi-Fi after the first restart (two TCL sets did) | some firmware drops its saved network on a restart | **before the first restart** (step 3 starts with one) ask me to have the Wi-Fi password at hand. If the TV comes back with no network: tell me to open Settings → Network & Internet, pick the network and type the password, and say «تم»; then `optimize/find-tv.sh` (the address may change) and the same command. Never touch the Wi-Fi settings yourself |
 | a «choose a home app» list, or a «who is watching» profile picker, shows on the TV during the home switch (a Sony with two profiles, a Nokia) | the TV asks which home to use, or which profile to open | look at the screen (`optimize/shot.sh home`) and ask me to press OK on «تلفزيونك» then «دائماً» (Always) in the list; on a profile picker my usual profile, then Home. Then the same command if it stopped |
@@ -462,6 +464,12 @@ If I say no or don't answer, say nothing more about it. If I say yes:
   Never keep, copy or upload my photos anywhere else, and never put them in this folder.
 - Tell me I can change it any time: `optimize/photos.sh del N`, `clear` (the TV goes back to our photos only), `mode mix|only`,
   or in the screensaver app's settings, row «صوري» (mode, remove all). Adding photos is only through you.
+
+### Offer: a second TV (only if I say I have another one)
+
+If I mention another TV that already has تلفزيونك, offer once, in one line: «تبغى أنقل إعداداتك من التلفزيون الثاني؟»
+If yes: `optimize/saver.sh export > settings.json` on the one that has them, then on this one `optimize/saver.sh import settings.json`
+(a preview), show me the list, and only after I agree `--yes` (`docs/SETTINGS.md`, row «نقل الإعدادات»). Never my photos, tasks or own adhan.
 
 ## 8. Ask me to share how it went (the very last thing)
 
