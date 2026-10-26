@@ -1666,7 +1666,7 @@ function fitMatches(row){
   return false;   // the caller may show these games apart
 }
 // A game is one line (clubs, crests, score, date, «بعد …»), and never ends in «…». When it is too long for the card the steps are, in this
-// order: the clubs' short names, the date's short form, a slightly smaller size, and only then no crests. Every step starts from the full
+// order: no crests on that row (the full names stay), the clubs' short names, the date's short form, a slightly smaller size. Every step starts from the full
 // row again (the names and the date keep their full form in data-full), so a card that gets smaller redoes it.
 const rowCut = row => {
   const r = row.getBoundingClientRect();
@@ -1682,11 +1682,12 @@ function fitGameRow(li){
   row.classList.remove('nocr');
   const size = (steps = FIT_STEPS) => steps.find(k => { row.style.fontSize = k === 1 ? '' : k + 'em'; return !rowCut(row); });
   if(size([1])) return;
+  row.classList.add('nocr');   // this row only: the full names are kept, the crests go (a row that fits with its crests keeps them)
+  if(size([1])) return;
   shorten(row);
   if(size([1])) return;
   if(when && when.dataset.s) when.textContent = when.dataset.s;
   if(size()) return;
-  row.classList.add('nocr');
   size([...FIT_STEPS, .64, .56, .5]);   // a narrow card: smaller still, never two lines
 }
 function shortenRows(ul){
