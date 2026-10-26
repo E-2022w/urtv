@@ -20,7 +20,7 @@ public final class PrayerMethodRun {
         check("label: auto names the country's calculation by the zone; the Ja'fari names itself",
                 PrayerMethod.label("auto", "Asia/Riyadh").equals("تلقائي · أم القرى") && PrayerMethod.label("auto", "Asia/Kuwait").equals("تلقائي · الكويت")
                 && PrayerMethod.label("auto", "Asia/Qatar").equals("تلقائي · قطر") && PrayerMethod.label("auto", "Asia/Dubai").equals("تلقائي · الإمارات")
-                && PrayerMethod.label("auto", "Asia/Bahrain").equals("تلقائي · الخليج") && PrayerMethod.label("auto", "Africa/Cairo").equals("تلقائي · الهيئة المصرية للمساحة") && PrayerMethod.label("jafari", "Asia/Kuwait").startsWith("جعفري"), "");
+                && PrayerMethod.label("auto", "Asia/Bahrain").equals("تلقائي · الخليج") && PrayerMethod.label("auto", "Africa/Cairo").equals("تلقائي · الهيئة المصرية للمساحة") && PrayerMethod.label("auto", "Asia/Amman").equals("تلقائي · وزارة الأوقاف الأردنية") && PrayerMethod.label("jafari", "Asia/Kuwait").startsWith("جعفري"), "");
         // the Gulf cities of the list
         int gulf = 0;
         java.util.Set<String> names = new java.util.HashSet<>();

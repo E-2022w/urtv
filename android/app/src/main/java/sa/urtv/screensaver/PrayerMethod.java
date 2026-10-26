@@ -39,6 +39,7 @@ final class PrayerMethod {
             case "Asia/Dubai": return "الإمارات";
             case "Asia/Bahrain": case "Asia/Muscat": return "الخليج";
             case "Africa/Cairo": return "الهيئة المصرية للمساحة";
+            case "Asia/Amman": return "وزارة الأوقاف الأردنية";
             default: return "أم القرى";
         }
     }

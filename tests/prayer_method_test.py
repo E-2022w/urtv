@@ -19,8 +19,8 @@ def check(name, ok, detail=""):
     failed += not ok
 
 
-EXPECTED_METHODS = 7   # Ja'fari, Umm al-Qura, the four Gulf ones, Egypt
-EXPECTED_ZONES = 6   # the zones that have a method of their own: the Gulf's five, Cairo
+EXPECTED_METHODS = 8   # Ja'fari, Umm al-Qura, the four Gulf ones, Egypt, Jordan
+EXPECTED_ZONES = 7   # the zones that have a method of their own: the Gulf's five, Cairo, Amman
 # the page: CONFIG.prayerMethod = pm=jafari ? 0 : ({'Asia/Kuwait':9, ...})[zone] || 4
 tpl = (ROOT / "src/template.html").read_text(encoding="utf-8")
 m = re.search(r"CONFIG\.prayerMethod = _Q\.get\('pm'\) === 'jafari' \? 0\s*:\s*\(\{([^}]*)\}\)\[CONFIG\.timezone\] \|\| 4;", tpl)
@@ -44,7 +44,7 @@ labels = {}
 for zs, label in re.findall(r"((?:case \"[A-Za-z_/]+\": )+)return \"([^\"]+)\";", app_src):
     for z in re.findall(r'"([A-Za-z_/]+)"', zs):
         labels[z] = label
-by_id = {9: "الكويت", 10: "قطر", 16: "الإمارات", 8: "الخليج", 5: "الهيئة المصرية للمساحة"}
+by_id = {9: "الكويت", 10: "قطر", 16: "الإمارات", 8: "الخليج", 5: "الهيئة المصرية للمساحة", 23: "وزارة الأوقاف الأردنية"}
 check("the app names the same zones, one label per method", {z: l for z, l in labels.items()} == {z: by_id[i] for z, i in page.items()}, f"{labels}")
 
 # every method the page and the launcher know has the same parameters in both
