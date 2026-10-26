@@ -1553,6 +1553,84 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   }
 }
 
+// ---- the city under the clock, with the calculation's name when it is not Umm al-Qura; and the first-run note (#citynote=1)
+{
+  const MANAMA = 'city=' + encodeURIComponent('المنامة') + '&lat=26.2154&lon=50.5832&tz=Asia/Bahrain';
+  for (const [hash, want, label] of [['', 'بتوقيت الرياض', 'Riyadh, Umm al-Qura: as it always was'], [MANAMA, 'بتوقيت المنامة · حساب الخليج', 'Bahrain'],
+      ['city=' + encodeURIComponent('الدوحة') + '&tz=Asia/Qatar', 'بتوقيت الدوحة · حساب قطر', 'Qatar'],
+      ['city=' + encodeURIComponent('القطيف') + '&pm=jafari', 'بتوقيت القطيف · الحساب الجعفري', 'the Ja\'fari method']]) {
+    const { p, ctx, errors } = await open('tv.html', hash, { width: 1920, height: 1080 });
+    const r = await p.evaluate(() => ({ sub: document.getElementById('clock-sub').textContent, note: !document.getElementById('citynote').hidden }));
+    check(`clock's city line, ${label}: «${want}», no note, no script errors`, !errors.length && r.sub === want && !r.note, JSON.stringify(r) + errors.join('; '));
+    await ctx.close();
+  }
+  for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) for (const clock of ['large', 'small']) {
+    const { p, ctx, errors } = await open('tv.html', `citynote=1&clocksize=${clock}&yearstrip=1`, { width, height });
+    const r = await p.evaluate(() => { const n = document.getElementById('citynote'), b = n.getBoundingClientRect(), w = document.querySelector('.week').getBoundingClientRect();
+      return { text: n.textContent, shown: !n.hidden && b.height > 0, lines: Math.round(b.height / parseFloat(getComputedStyle(n).lineHeight || 20)), inside: b.left >= 0 && b.right <= innerWidth && b.bottom <= innerHeight,
+        clear: b.right <= w.left + 1 || b.left >= w.right - 1 || b.bottom <= w.top || b.top >= w.bottom }; });
+    check(`first-run note at ${width}x${height}, clock ${clock}: «المدينة: الرياض. لتغييرها: الإعدادات ← الموقع» in one line under the city, clear of the card, no script errors`,
+      !errors.length && r.text === 'المدينة: الرياض. لتغييرها: الإعدادات ← الموقع' && r.shown && r.inside && r.clear, JSON.stringify(r) + errors.join('; '));
+    await ctx.close();
+  }
+  {   // never on the launcher's cards, and it goes after ten minutes
+    const w = await open('tv.html', 'citynote=1&panel=verse&widget=1', { width: 461, height: 250 });
+    check('first-run note: never on the home screen\'s cards', !w.errors.length && await w.p.evaluate(() => document.getElementById('citynote').hidden), w.errors.join('; '));
+    await w.ctx.close();
+    const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    await ctx.route(/^https?:/, r => r.abort());
+    const p = await ctx.newPage(), errors = [];
+    p.on('pageerror', e => errors.push(e.message));
+    await p.clock.install({ time: new Date('2026-10-23T12:00:00Z') });
+    await p.goto(page('tv.html') + '#citynote=1&gap=0');
+    await p.clock.runFor(60 * 1000);
+    const before = await p.evaluate(() => !document.getElementById('citynote').hidden);
+    await p.clock.runFor(9 * 60 * 1000 + 1000);
+    check('first-run note: there for ten minutes, then gone', !errors.length && before && await p.evaluate(() => document.getElementById('citynote').hidden), errors.join('; '));
+    await ctx.close();
+  }
+}
+
+// ---- «الصلاة القادمة»: one line, «المغرب ٥:٤٥ م · بعد ساعة و ٥ دقائق», the name lit; every style, three sizes, both digit systems
+{
+  const TIMES = "buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'19:15'});";
+  for (const [when, want, label] of [
+      ['2026-10-22T13:40:00Z', 'المغرب٥:٤٥ م· بعد ساعة و ٥ دقائق', 'Thursday 16:40'],
+      ['2026-10-23T07:00:00Z', 'الجمعة١١:٤٠ ص· بعد ساعة و ٤٠ دقيقة', 'Friday morning: الجمعة'],
+      ['2026-10-22T14:40:00Z', 'المغرب٥:٤٥ م· بعد ٥ دقائق', 'five minutes before Maghrib'],
+      ['2026-10-22T17:10:00Z', 'الفجر٤:٥٠ ص· بعد ٨ ساعات و ٤٠ دقيقة', 'after Isha: tomorrow\'s Fajr']]) {
+    for (const [hash, width, height] of [['panel=nextprayer', 1920, 1080], ['panel=nextprayer', 1280, 720], ['panel=nextprayer', 960, 540], ['panel=nextprayer&widget=1', 461, 250]]) {
+      for (const style of label === 'Thursday 16:40' ? ['current', 'dark1', 'glass1', 'dark3', 'glass3'] : ['current']) {
+        for (const digits of label === 'Thursday 16:40' ? ['hindi', 'latin'] : ['hindi']) {
+          const { p, ctx, errors } = await open('tv.html', `${hash}&cardstyle=${style}&digits=${digits}`, { width, height });
+          await p.clock.setFixedTime(new Date(when));
+          await p.evaluate(TIMES + ' renderPanel(false);');
+          const r = await p.evaluate(() => {
+            const li = [...document.querySelectorAll('#week-list li')], card = document.querySelector('.week').getBoundingClientRect(), np = document.querySelector('#week-list li.np');
+            const parts = np ? [...np.children] : [];
+            return { n: li.length, hd: document.getElementById('week-hd').textContent, text: np ? np.textContent : '', lit: np ? getComputedStyle(np.querySelector('b')).color : '',
+              plain: np ? getComputedStyle(np.querySelector('.t')).color : '', whole: parts.every(x => x.getClientRects().length === 1 && x.scrollWidth <= x.clientWidth + 1),
+              inside: parts.every(x => { const b = x.getBoundingClientRect(); return b.left >= card.left - 1 && b.right <= card.right + 1 && b.bottom <= card.bottom + 1; }),
+              h: Math.round(np ? np.getBoundingClientRect().height : 0), font: np ? parseFloat(getComputedStyle(np).fontSize) : 0 };
+          });
+          const toLatin = x => x.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+          const tag = `next prayer ${label} ${width}x${height}${hash.includes('widget') ? ' card' : ''} ${style} ${digits}`;
+          check(`${tag}: one line «${want}» under «الصلاة القادمة», the name lit, inside the card, no script errors`,
+            !errors.length && r.n === 1 && r.hd === 'الصلاة القادمة' && r.text === (digits === 'latin' ? toLatin(want) : want) && r.lit !== r.plain && r.whole && r.inside
+            && r.h <= r.font * 3.2, JSON.stringify(r) + errors.join('; '));
+          await ctx.close();
+        }
+      }
+    }
+  }
+  {   // with nothing put in: the times the page works out itself (offline too), one line, no errors
+    const { p, ctx, errors } = await open('tv.html', 'panel=nextprayer&widget=1', { width: 461, height: 250 });
+    const r = await p.evaluate(() => ({ n: document.querySelectorAll('#week-list li.np').length, empty: !!document.querySelector('#week-list li.empty') }));
+    check('next prayer from the page\'s own times: one line, no errors', !errors.length && r.n === 1 && !r.empty, JSON.stringify(r) + errors.join('; '));
+    await ctx.close();
+  }
+}
+
 // ---- a city outside Saudi Arabia: its own time zone for the clock, the dates (Gregorian and Hijri), the prayers and the
 // games. The browser itself is set to New York so that nothing can pass by using the computer's zone.
 {
@@ -2146,6 +2224,7 @@ const HOME_COMBOS = [   // [name, cards, extra hash, games to put in (when it ha
   ['matches (short names) + prayer row + hours', 'matches,prayerrow,hourly', 'teams=136013', SHORT_GAMES],
   ['verse + stocks', 'verse,stocks', 'stocks=2222,1120,AAPL', null],
   ['adhkar alone', 'adhkar', '', null],
+  ['next prayer + matches + hours', 'nextprayer,matches,hourly', 'teams=136013', SHORT_GAMES],
   ['tasks + forecast', 'tasks,forecast', 'tasks=' + encodeURIComponent(TASKS12.join('\n')), null],
 ];
 const homeCards = async (cards, W, { style = 'current', tight = false, extra = '', games = null, digits = 'hindi', isha = '19:15', width, height } = {}) => {
@@ -2205,6 +2284,14 @@ for (const [style, W] of [['current', 960], ['glass1', 1280], ['dark3', 960], ['
       inCard: cell.left >= card.left - 1 && cell.right <= card.right + 1, z: CARDS[1].z, size: parseFloat(getComputedStyle(i).fontSize) }; });
   check(`home prayer row, ${style}, screen ${W}: «العشاء ٦:٥١ م» on one line inside its cell and the card (text size ${r.size.toFixed(1)} px)`,
     !o.errors.length && r.name === 'العشاء' && r.time === '٦:٥١ م' && r.one && r.inCell && r.inCard, JSON.stringify(r) + o.errors.join('; '));
+  await o.ctx.close();
+}
+// «الصلاة القادمة» in the home screen's pair, beside the hours: both fit, and the one line is no taller than the hours' row
+for (const W of [1920, 1280, 960]) for (const style of ['current', 'dark1', 'glass1', 'dark3', 'glass3']) {   // in the home screen's pair, beside the hours: no taller than them
+  const o = await homeCards('nextprayer,hourly', W, { style }), r = await homeProbe(o.p);
+  const hs = await o.p.evaluate(() => CARDS.map(c => Math.round(c.ul.getBoundingClientRect().height)));
+  check(`home cards next prayer + hours, ${style}, screen ${W}: both fit the ${o.bw}x${o.bh} box, the line no taller than the hours`,
+    !o.errors.length && r.kinds.join() === 'nextprayer,hourly' && !r.overlap.length && !r.outside.length && !r.cut.length && !r.dots.length && hs[0] <= hs[1], JSON.stringify({ r, hs }) + o.errors.join('; '));
   await o.ctx.close();
 }
 // the list in the link: one value works, none or empty is no card, a card once, no more than three, the unknown left out
@@ -2533,9 +2620,9 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
 // ---- the settings' pickers draw the focused card live: the page itself, card only (#panel=<choice>&cardstyle=<style>&widget=1) with the
 // current settings, in a box of 436 x 300 over a dimmed photo (SettingsActivity.pickWithPreview, which sizes its frame to the card). Every choice and every style: no errors, drawn, inside the box.
 const PREVIEW = [436, 300];
-for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'matches', 'verse', 'wisdom', 'adhkar', 'stocks', 'tasks', 'year', 'smart', 'today']) {
+for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'nextprayer', 'matches', 'verse', 'wisdom', 'adhkar', 'stocks', 'tasks', 'year', 'smart', 'today']) {
   for (const style of ['current', 'dark1', 'glass1', 'dark3', 'glass3']) {
-    if (style !== 'current' && !['verse', 'matches', 'prayerrow', 'hourly', 'today', 'adhkar'].includes(panel)) continue;
+    if (style !== 'current' && !['verse', 'matches', 'prayerrow', 'nextprayer', 'hourly', 'today', 'adhkar'].includes(panel)) continue;
     const o = await open('tv.html', `city=%D8%AC%D8%AF%D8%A9&lat=21.5433&lon=39.1728&teams=136013&stocks=2222,1120,AAPL&tasks=${encodeURIComponent('اتصل بالسباك\nشراء حليب')}&panel=${panel}&cardstyle=${style}&widget=1`,
       { width: PREVIEW[0], height: PREVIEW[1], now: HOME_NOW });
     await o.p.evaluate(HOME_SEED() + ' renderPanel(false);');
@@ -3475,7 +3562,7 @@ for (const j of [0, 15, 29]) {
   await ctx.close();
 }
 
-const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','matches','verse','wisdom','adhkar','stocks','tasks','year','smart','today'];
+const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','nextprayer','matches','verse','wisdom','adhkar','stocks','tasks','year','smart','today'];
 // ---- «شريط الأسواق»: #mkbar=off hides the markets line, keeps the weather, asks for nothing; the saved list comes back with on
 {
   const SHOTS = process.env.SHOTS;   // a folder: the pictures of the new options are written there

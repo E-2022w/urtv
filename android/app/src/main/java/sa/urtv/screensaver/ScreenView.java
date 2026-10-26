@@ -19,7 +19,7 @@ final class ScreenView {
     /** Told when the page's renderer process died: the view is dead and must be thrown away (release), never reloaded. */
     interface Gone { void onGone(WebView dead); }
 
-    static WebView create(final Context c, Gone gone) { return build(c, new Prefs(c).dashboardUrl(c), true, gone); }
+    static WebView create(final Context c, Gone gone) { return build(c, new Prefs(c).screenUrl(c), true, gone); }
 
     /** For the settings' pickers: the page drawn live for one card (url from Prefs.previewUrl), nothing else started. */
     static WebView createPreview(final Context c, String url, Gone gone) { return build(c, url, false, gone); }

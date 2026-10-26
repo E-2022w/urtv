@@ -44,6 +44,21 @@ for zs, label in re.findall(r"((?:case \"[A-Za-z_/]+\": )+)return \"([^\"]+)\";"
 by_id = {9: "الكويت", 10: "قطر", 16: "الإمارات", 8: "الخليج"}
 check("the app names the same five zones, one label per method", {z: l for z, l in labels.items()} == {z: by_id[i] for z, i in page.items()}, f"{labels}")
 
+# the city line under the clock names the calculation in the same words on both screens: the page's CAL_LABEL by method id, the launcher's
+# ClockZone.calendar by the same zones
+cm = re.search(r"const CAL_LABEL = \{([^}]*)\};", tpl)
+cal_page = {int(i): l for i, l in re.findall(r"(\d+):'([^']+)'", cm.group(1))} if cm else {}
+cz = (ROOT / "android/launcher/src/main/java/sa/urtv/home/ClockZone.java").read_text(encoding="utf-8")
+cz = cz[cz.index("static String calendar"):]
+cz = cz[:cz.index("\n    }\n")]
+cal_home = {}
+for zs, label in re.findall(r"((?:case \"[A-Za-z_/]+\": )+)return \"([^\"]+)\";", cz):
+    for z in re.findall(r'"([A-Za-z_/]+)"', zs):
+        cal_home[z] = label
+jaf = re.search(r'"jafari"\.equals\(pm\)\) return "([^"]+)"', cz)
+check("the clock's city line: the same calculation names on the screensaver and the home screen, none for Umm al-Qura",
+      cal_home == {z: cal_page.get(i) for z, i in page.items()} and jaf and jaf.group(1) == cal_page.get(0) and 4 not in cal_page, f"{cal_page} vs {cal_home}")
+
 # every method the page and the launcher know has the same parameters in both
 js = re.findall(r"^\s+(\d+):\s*\{fajr:([\d.]+),\s*isha:([\d.]+),\s*ishaMin:(\d+),\s*maghrib:([\d.]+),\s*tune:\[([-\d,]+)\]\}", tpl, re.M)
 jv = {int(i): (float(f), float(ia), int(im), float(mg), tuple(int(x) for x in t.split(","))) for i, f, ia, im, mg, t in js}
@@ -56,7 +71,7 @@ check("page and launcher have the same six methods with the same angles, delays 
 if shutil.which("javac"):
     src = ROOT / "android/app/src/main/java/sa/urtv/screensaver"
     with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run(["javac", "-encoding", "UTF-8", "-d", tmp, str(src / "PrayerMethod.java"), str(src / "Cities.java"), str(ROOT / "tests/PrayerMethodRun.java")], check=True,
+        subprocess.run(["javac", "-encoding", "UTF-8", "-d", tmp, str(src / "PrayerMethod.java"), str(src / "Cities.java"), str(src / "Location.java"), str(ROOT / "tests/PrayerMethodRun.java")], check=True,
                        capture_output=True)
         run = subprocess.run(["java", "-Dfile.encoding=UTF-8", "-cp", tmp, "sa.urtv.screensaver.PrayerMethodRun"], capture_output=True)
     out = run.stdout.decode("utf-8")

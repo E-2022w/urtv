@@ -337,7 +337,7 @@ itself) and tell me. Some TCL firmware keeps its own home: then `SKIP_LAUNCHER=1
 Every setting, and what to say when I ask for something else: `docs/SETTINGS.md`.
 
 ```
-optimize/saver.sh cities                          # find my city (Saudi Arabia and the Gulf), then: optimize/saver.sh city <name>   (not listed: city <name> <lat> <lon> <time zone, e.g. Asia/Riyadh or Asia/Kuwait; a place that is not in the list is refused without it>)
+optimize/saver.sh cities                          # find my city (Saudi Arabia and the Gulf), then: optimize/saver.sh city <name>, even for Riyadh (until a city is set the screensaver shows a «change your city» note)   (not listed: city <name> <lat> <lon> <time zone, e.g. Asia/Riyadh or Asia/Kuwait; a place that is not in the list is refused without it>)
 optimize/saver.sh prayermethod jafari             # only if I asked for the Shia Ja'fari times (auto = my country's own, the default)
 optimize/saver.sh find-team <club as I wrote it>  # Arabic is fine (الهلال): one call per club, Saudi clubs first;
                                                   # then: optimize/saver.sh teams <id:Name> <id:Name> ...  (my order); «لا شي»: optimize/saver.sh teams none

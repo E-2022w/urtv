@@ -36,6 +36,20 @@ public final class PrayerMethodRun {
             }
         }
         check("the five Gulf states are in the list, with their big cities (at least 40)", gulf >= 40, String.valueOf(gulf));
+        // the «الموقع» group: the country filters the city list, and is told by the city's zone
+        check("country: Saudi Arabia's regions, or the Gulf state's one", Location.regions(0).length == 13 && Location.regions(1).length == 1
+                && Location.regions(1)[0].name.equals("البحرين") && Location.regions(5)[0].name.equals("سلطنة عُمان"), String.valueOf(Location.regions(0).length));
+        int listed = 0;
+        for (int i = 0; i < Location.COUNTRIES.length; i++) listed += Location.regions(i).length;
+        check("country: every region of the list is in one country", listed == Cities.REGIONS.length, listed + " of " + Cities.REGIONS.length);
+        check("country: by the city's zone; a place of one's own elsewhere says so", Location.countryLabel("Asia/Riyadh").equals("السعودية")
+                && Location.countryLabel("Asia/Bahrain").equals("البحرين") && Location.countryLabel("Africa/Cairo").equals("مكان من اختيارك"), "");
+        check("country: the codes are the ones the search takes", java.util.Arrays.stream(Location.COUNTRIES).allMatch(c -> PrayerMethod.searchable(c[0]))
+                && Location.COUNTRIES.length == PrayerMethod.SEARCH_COUNTRIES.length, "");
+        // the first-run note: while the city was never set, the first three starts
+        check("note: due on the first three starts while no city was set, never once one was",
+                Location.noteDue(false, 0) && Location.noteDue(false, 2) && !Location.noteDue(false, 3) && !Location.noteDue(true, 0), "");
+        check("note: its words", Location.note("الرياض").equals("المدينة: الرياض. لتغييرها: الإعدادات ← الموقع"), Location.note("الرياض"));
         System.exit(failed == 0 ? 0 : 1);
     }
 }
