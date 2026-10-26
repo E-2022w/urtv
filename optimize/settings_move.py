@@ -55,8 +55,9 @@ CLOCK_SIZES = ("large", "medium", "small")
 MK_STYLES = ("arrows", "prices")
 MARKETS = ("tasi", "aramco", "spx", "btc", "gold", "silver", "xrp")
 MAX_MARKETS = 4
-PANELS = ("shows", "prayers", "forecast", "hourly", "prayerrow", "matches", "verse", "wisdom", "adhkar", "stocks",
-          "tasks", "year", "smart", "today", "none")
+PANELS = ("shows", "prayers", "forecast", "hourly", "prayerrow", "nextprayer", "matches", "verse", "wisdom", "adhkar",
+          "stocks", "tasks", "year", "smart", "today", "none")
+HOME_ONLY = ("nextprayer",)   # Prefs.homeOnly: offered on the home cards, never as the screensaver's panel
 HOME_CARDS = 3
 MAX_TEAMS = 20
 PRAYERS = ("fajr", "dhuhr", "asr", "maghrib", "isha")
@@ -429,7 +430,7 @@ def validate(d):
         c = obj(d["cards"], "cards", ("panel", "home"), errs, notes)
         if c is not None:
             o = {}
-            if "panel" in c and choice(c["panel"], PANELS, "cards.panel", errs):
+            if "panel" in c and choice(c["panel"], tuple(x for x in PANELS if x not in HOME_ONLY), "cards.panel", errs):
                 o["panel"] = c["panel"]
             if "home" in c:
                 h = c["home"]

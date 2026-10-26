@@ -270,6 +270,7 @@ refused("hijri offset 3", lambda d: d.update(hijri_offset=3), "hijri_offset must
 refused("hijri offset -3", lambda d: d.update(hijri_offset=-3), "hijri_offset")
 refused("hijri offset a string", lambda d: d.update(hijri_offset="1"), "hijri_offset")
 refused("panel unknown", lambda d: d["cards"].update(panel="news"), "cards.panel must be one of")
+refused("next prayer as the screensaver panel (home only)", lambda d: d["cards"].update(panel="nextprayer"), "cards.panel must be one of")
 refused("four home cards", lambda d: d["cards"].update(home=["verse", "hourly", "year", "today"]), "cards.home must be a list of up to 3")
 refused("home card twice", lambda d: d["cards"].update(home=["verse", "verse"]), "cards.home")
 refused("home card unknown", lambda d: d["cards"].update(home=["news"]), "cards.home")
