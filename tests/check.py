@@ -53,6 +53,87 @@ check("dist/tv.html carries the build stamp the app compares pages by (<meta nam
       re.search(rb'<meta name="urtv-build" content="\d{14}">', (ROOT / "dist/tv.html").read_bytes()[:4096]) is not None)
 check("dist/ matched a fresh build (run src/build.py after editing src/)", len(before) == 1 and not stale, stale)
 
+
+# ---- the page must run on an old WebView (Chrome 66): no `?.` and no `??` (Chrome 80), no .flat() / .flatMap() (Chrome 69).
+# A script that cannot parse never starts, so one such line leaves the screensaver blank on those TVs.
+def too_new_js(html):
+    """(line, what) for each `?.` / `??` / `.flat(` / `.flatMap(` in the code of the page's <script> blocks; strings,
+    comments and regex literals are skipped, the code inside a template literal's ${...} is read."""
+    found = []
+    line_of = lambda i: html.count("\n", 0, i) + 1
+    for m in re.finditer(r"<script\b[^>]*>(.*?)</script>", html, re.S):
+        s, base = m.group(1), m.start(1)
+        i, n, stack, last = 0, len(s), [], ""   # stack: one entry per open `${` (the brace depth inside it); last: last code char
+        depth = 0
+        def skip_template(i):   # s[i] is just after a backtick or a closing `}` of ${}: read the text up to ${ or the closing backtick
+            while i < n:
+                if s[i] == "\\":
+                    i += 2
+                elif s[i] == "`":
+                    return i + 1, False
+                elif s.startswith("${", i):
+                    return i + 2, True
+                else:
+                    i += 1
+            return i, False
+        while i < n:
+            c = s[i]
+            if s.startswith("//", i):
+                i = s.find("\n", i) if s.find("\n", i) >= 0 else n
+            elif s.startswith("/*", i):
+                i = s.find("*/", i + 2) + 2 if s.find("*/", i + 2) >= 0 else n
+            elif c in "'\"":
+                i += 1
+                while i < n and s[i] != c and s[i] != "\n":
+                    i += 2 if s[i] == "\\" else 1
+                i += 1
+                last = "a"
+            elif c == "`":
+                i, inside = skip_template(i + 1)
+                if inside:
+                    stack.append(depth)
+                    depth = 0
+                last = "a"
+            elif c == "/" and (last == "" or last in "(,=:[!&|?{};+-*%<>~^" or re.search(r"\b(return|typeof|case|in|of)$", s[max(0, i - 7):i])):
+                i += 1   # a regex literal: up to the closing slash, not one inside [...]
+                cls = False
+                while i < n and s[i] != "\n" and (cls or s[i] != "/"):
+                    if s[i] == "\\":
+                        i += 1
+                    elif s[i] == "[":
+                        cls = True
+                    elif s[i] == "]":
+                        cls = False
+                    i += 1
+                i += 1
+                last = "a"
+            else:
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    if depth == 0 and stack:   # the end of a ${...}: back into the template text
+                        depth = stack.pop()
+                        i, inside = skip_template(i + 1)
+                        if inside:
+                            stack.append(depth)
+                            depth = 0
+                        last = "a"
+                        continue
+                    depth -= 1
+                elif c == "?" and s.startswith("??", i):
+                    found.append((line_of(base + i), "??"))
+                    i += 1
+                elif c == "?" and s.startswith("?.", i) and not s[i + 2:i + 3].isdigit():
+                    found.append((line_of(base + i), "?."))
+                elif c == "." and re.match(r"\.(flat|flatMap)\(", s[i:i + 9]):
+                    found.append((line_of(base + i), ".flat("))
+                if not c.isspace():
+                    last = c
+                i += 1
+    return found
+too_new = too_new_js((ROOT / "src/template.html").read_text(encoding="utf-8"))
+check("src/template.html: no ?. or ?? or .flat() in the page's code (they stop the page on a WebView older than 80)", not too_new, too_new)
+
 # ---- data files
 for f in tracked("*.json"):
     try:

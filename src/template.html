@@ -1250,8 +1250,8 @@ async function fetchNext(id){
   const r = await fetchT(`https://www.thesportsdb.com/api/v1/json/${CONFIG.sportsKey}/eventsnext.php?id=${id}`, 12000);
   if(!r.ok) throw 0;
   const j = await r.json();
-  if(j?.events) NEXT_LIST[id] = j.events;
-  return (j?.events || [])[0] || null;
+  if(j && j.events) NEXT_LIST[id] = j.events;
+  return ((j && j.events) || [])[0] || null;
 }
 function toDate(ev){
   const s = ev.strTimestamp || `${ev.dateEvent}T${ev.strTime || '00:00:00'}`;
@@ -1985,7 +1985,7 @@ async function directQuote(j){
       if(!r.ok) throw 0;
       const c = (await r.json())[j.cg];
       if(!c || typeof c.usd !== 'number') throw 0;
-      return {p:c.usd, v:null, c:[], pct:c.usd_24h_change ?? c.usd_24hr_change ?? null, at:Date.now()};
+      return {p:c.usd, v:null, c:[], pct:c.usd_24h_change != null ? c.usd_24h_change : (c.usd_24hr_change != null ? c.usd_24hr_change : null), at:Date.now()};
     }
     const res = (await yahooChart(j.key, j.intra ? 'interval=15m&range=1d' : 'interval=1d&range=5d')).chart.result[0];
     const price = res.meta.regularMarketPrice;
@@ -2085,7 +2085,7 @@ const loadWeek = guarded('week', async function(){
       lists.push(await ask(`https://api.tvmaze.com/schedule/web?date=${dt}`));
       for(const c of F.countries) lists.push(await ask(`https://api.tvmaze.com/schedule?country=${encodeURIComponent(c)}&date=${dt}`));
     }
-    lists.filter(Array.isArray).flat().forEach(e => {
+    lists.filter(Array.isArray).reduce((all, list) => all.concat(list), []).forEach(e => {
       const s = e.show || (e._embedded && e._embedded.show) || {};
       if(s.type && SKIP_TYPES.includes(s.type)) return;
       if(s.genres && s.genres.includes('Soap')) return;   // no daytime soaps
@@ -2875,18 +2875,19 @@ async function loadWeather(){
     const d = document.getElementById('wx-desc');
     setText(d, WX_CODES[j.current.weather_code] || '');
     wxSource();
-    const hi = j.daily?.temperature_2m_max?.[0], lo = j.daily?.temperature_2m_min?.[0];
+    const hi = j.daily && j.daily.temperature_2m_max && j.daily.temperature_2m_max[0];
+    const lo = j.daily && j.daily.temperature_2m_min && j.daily.temperature_2m_min[0];
     setText(document.getElementById('wx-range'),
       (hi != null && lo != null) ? `${ar(Math.round(hi))}° / ${ar(Math.round(lo))}°` : '');
     const dl = j.daily || {};
-    FORECAST = (dl.time || []).map((t, i) => ({date:t, code:dl.weather_code?.[i],
-      hi:dl.temperature_2m_max?.[i], lo:dl.temperature_2m_min?.[i]})).filter(x => x.hi != null && x.lo != null);
+    FORECAST = (dl.time || []).map((t, i) => ({date:t, code:dl.weather_code && dl.weather_code[i],
+      hi:dl.temperature_2m_max && dl.temperature_2m_max[i], lo:dl.temperature_2m_min && dl.temperature_2m_min[i]})).filter(x => x.hi != null && x.lo != null);
     try{ localStorage.setItem(LS.forecast, JSON.stringify(FORECAST)); }catch(e){}
     if(hours){
       const hr = j.hourly || {}, from = hourKey();
-      HOURLY = (hr.time || []).map((t, i) => ({t, code:hr.weather_code?.[i], temp:hr.temperature_2m?.[i]})).filter(x => x.t > from && x.temp != null).slice(0, 12);
+      HOURLY = (hr.time || []).map((t, i) => ({t, code:hr.weather_code && hr.weather_code[i], temp:hr.temperature_2m && hr.temperature_2m[i]})).filter(x => x.t > from && x.temp != null).slice(0, 12);
       SUN = {};
-      (dl.time || []).forEach((d, i) => { const up = dl.sunrise?.[i], down = dl.sunset?.[i]; if(up && down) SUN[d] = [up.slice(11, 16), down.slice(11, 16)]; });
+      (dl.time || []).forEach((d, i) => { const up = dl.sunrise && dl.sunrise[i], down = dl.sunset && dl.sunset[i]; if(up && down) SUN[d] = [up.slice(11, 16), down.slice(11, 16)]; });
       try{ localStorage.setItem(LS.hourly, JSON.stringify({h:HOURLY, s:SUN})); }catch(e){}
     }
     renderPanel(false, 'forecast', 'hourly');
