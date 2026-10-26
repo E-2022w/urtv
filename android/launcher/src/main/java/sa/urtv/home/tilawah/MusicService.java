@@ -648,27 +648,14 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     void seekBy(int delta) {
         if (source == Prefs.SOURCE_ADHAN) return;
-        // a held key sends dozens a second: the first is applied now, the rest are one step at the window's end (SeekBurst)
+        // the screen paces a held key (10 s per 250 ms); SeekBurst drops a burst that gets past it (a script, a stuck key)
         int now = seekBurst.offer(delta, SystemClock.elapsedRealtime());
         if (now != 0) applySeek(now);
-        if (seekBurst.hasPending()) {
-            handler.removeCallbacks(seekFlush);
-            handler.postDelayed(seekFlush, seekBurst.dueIn(SystemClock.elapsedRealtime()));
-        }
     }
 
     private final SeekBurst seekBurst = new SeekBurst();
-    private final Runnable seekFlush = new Runnable() {
-        @Override public void run() {
-            int d = seekBurst.flush(SystemClock.elapsedRealtime());
-            if (d != 0 && source != Prefs.SOURCE_ADHAN) applySeek(d);
-        }
-    };
 
-    private void resetSeekBurst() {
-        handler.removeCallbacks(seekFlush);
-        seekBurst.reset();
-    }
+    private void resetSeekBurst() { seekBurst.reset(); }
 
     private void applySeek(int delta) {
         if (source == Prefs.SOURCE_SURAH) seekTo(SeekBurst.target(position, delta, duration));   // a surah only; a station is live, a step there is next/prev

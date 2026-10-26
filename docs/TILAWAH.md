@@ -52,7 +52,7 @@ Package `sa.urtv.home` · classes `sa.urtv.home.tilawah` · label «تلاوة»
 | Key | Action |
 |---|---|
 | OK / Enter | play / pause (in the lists: open / choose) |
-| ◀ / ▶ | seek −10 s / +10 s (switches the section on the تلاوة screen) |
+| ◀ / ▶ | seek −10 s / +10 s (switches the section on the تلاوة screen); held, one step of 10 s every 250 ms, never faster (the service also drops any burst closer than 100 ms) |
 | ▼ | sleep timer (30, 60 or 90 minutes; off; stop now) |
 | Back | back to the list — playback continues |
 | media play/pause, next, previous | work through the media session |
