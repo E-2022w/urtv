@@ -99,6 +99,10 @@ exec > >(tee -a "$RUN/run.log") 2>&1   # everything it says, for optimize/share.
 # remembered in $RUN/tv-id.json; another one stops here, before the backup (which would overwrite the first TV's).
 tv --check
 
+# A home switch that a restart cut off is undone from its journal first (see optimize/home-journal.sh). Never stops the run.
+. optimize/home-journal.sh
+jrecover || true
+
 check_list() {   # never disable what UAD-ng rates Unsafe; show everything that is not "Recommended"
   local out
   out=$("$PY" -I optimize/check-packages.py "$1")

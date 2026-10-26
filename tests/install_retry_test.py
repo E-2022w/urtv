@@ -20,8 +20,11 @@ case "$1" in
   --batch)
     in=$(cat)
     case "$in" in
-      *nohup*) log arm; rm -f "$T/home_ok" ;;
+      *nohup*) log arm; rm -f "$T/home_ok"
+        echo "$in" | sed -n 's/.*deadman.sh [^ ]* [0-9]* \([^ ]*\) .*/\1/p' > "$T/nonce"
+        case "$in" in *"touch /data/local/tmp/home_ok."*) log supersede ;; esac ;;
       *"am force-stop com.android.tv.settings"*)
+        log switch
         case "$in" in *"disable-user --user 0 com.google.android.tungsten.setupwraith"*) log wraith-off ;; esac
         n=$(( $(cat "$T/switches" 2>/dev/null || echo 0) + 1 )); echo $n > "$T/switches"
         if [ "$ILLEGAL" = stock ]; then   # Nokia Streaming Box 8000: the stock home cannot be turned off
@@ -35,7 +38,9 @@ case "$1" in
         fi
         [ "$NOHOME" = yes ] && { echo stock > "$T/home"; exit 0; }   # firmware or the wizard keeps Home
         echo ours > "$T/home" ;;
-      *"pm enable"*"touch /data/local/tmp/home_ok"*) log restore-stock; echo stock > "$T/home" ;;
+      *"pm enable"*"touch /data/local/tmp/home_ok"*) log restore-stock; echo stock > "$T/home"
+        case "$in" in *"add-role-holder --user 0 android.app.role.HOME other.launcher"*) log holder-other ;; esac
+        case "$in" in *"pm enable com.old.helper"*) log helpers ;; esac ;;
       *) log other-batch ;;
     esac
     exit 0 ;;
@@ -65,7 +70,13 @@ case "$1" in
   "pm disable-user --user 0 com.google.android.tungsten.setupwraith") log wraith-off ;;
   *resolve-activity*) [ "$(cat "$T/home" 2>/dev/null)" = ours ] && echo sa.urtv.home/.MainActivity || echo stock/.Home ;;
   *dumpsys*) [ "$(cat "$T/home" 2>/dev/null)" = ours ] && echo "mResumedActivity: sa.urtv.home" ;;
-  "touch /data/local/tmp/home_ok") log disarm; touch "$T/home_ok" ;;
+  "touch /data/local/tmp/home_ok."*)
+    n=${1##*.}
+    if [ "$n" = "$(cat "$T/nonce" 2>/dev/null)" ]; then log disarm; else log disarm-wrong; fi
+    touch "$T/marker.$n" ;;
+  *WATCHDOG_ALIVE*) log hb-check; [ "$WATCHDOG" = dead ] && echo WATCHDOG_DEAD || echo WATCHDOG_ALIVE ;;
+  "[ -f /data/local/tmp/home_ok."*) n=${1#*home_ok.}; n=${n%% *}; [ -f "$T/marker.$n" ] && echo MARKER ;;
+  "cmd role get-role-holders"*) echo "$ROLE" ;;
 esac
 exit 0
 '''
@@ -83,22 +94,39 @@ while [ $# -gt 0 ]; do [ "$1" = -o ] && : > "$2"; shift; done
 '''
 
 
-def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None, curl_mode="", vanish="", illegal="", wraith_home="", wifi="", nohome="", install_mode=""):
+def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None, curl_mode="", vanish="", illegal="", wraith_home="", wifi="", nohome="", install_mode="",
+        watchdog="", seed=None, seed_home="", seed_marker=False, role="", script="install.sh", args=("launcher",)):
     t = Path(tempfile.mkdtemp())
     tree, bin_ = t / "tree", t / "bin"
     (tree / "optimize" / "lists").mkdir(parents=True); bin_.mkdir()
     shutil.copy(ROOT / "optimize" / "install.sh", tree / "optimize")
     shutil.copy(ROOT / "optimize" / "deadman.sh", tree / "optimize")
-    (tree / "optimize" / "lists" / "home-replaced.txt").write_text("# none\n")
+    shutil.copy(ROOT / "optimize" / "home-journal.sh", tree / "optimize")
+    (tree / "optimize" / "lists" / "home-replaced.txt").write_text("# none\n" if script == "install.sh" else "com.old.helper\n")
+    shutil.copy(ROOT / "optimize" / "restore-home.sh", tree / "optimize")
+    shutil.copy(ROOT / "optimize" / "restore.sh", tree / "optimize")
+    if seed:   # a journal an earlier run left: (state, role holder before)
+        (tree / "optimize" / "run").mkdir()
+        (tree / "optimize" / "run" / "home-switch.json").write_text(
+            '{\n  "nonce": "old1",\n  "state": "%s",\n  "stock": "com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity",\n'
+            '  "role_holder_before": "%s",\n  "wizard_before": "enabled",\n  "stock_before": "enabled",\n  "written": "x"\n}\n' % seed)
+    if seed_home:
+        (t / "home").write_text(seed_home + "\n")
+    if seed_marker:
+        (t / "marker.old1").write_text("")
     for f, body in (("py", STUB_PY), ("curl", STUB_CURL),
                     ("sleep", "#!/bin/sh\nexit 0\n")):
         (bin_ / f).write_text(body); (bin_ / f).chmod(0o755)
     if verifier is not None:
         (t / "verifier").write_text(verifier + "\n")
-    env = dict(os.environ, INSTALL_MODE=install_mode, NOHOME=nohome, WRAITH_HOME=wraith_home, WIFI=wifi, ILLEGAL=illegal, VERIFY=verify, VANISH=vanish, CURL_MODE=curl_mode, PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), T=str(t),
+    env = dict(os.environ, WATCHDOG=watchdog, ROLE=role, INSTALL_MODE=install_mode, NOHOME=nohome, WRAITH_HOME=wraith_home, WIFI=wifi, ILLEGAL=illegal, VERIFY=verify, VANISH=vanish, CURL_MODE=curl_mode, PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), T=str(t),
                FAIL_SWITCHES=str(fail_switches), FIRST_DROP=first_drop, DOWN_POLLS=str(down_polls))
-    r = subprocess.run(["bash", str(tree / "optimize" / "install.sh"), "launcher"], env=env, capture_output=True, text=True)
+    r = subprocess.run(["bash", str(tree / "optimize" / script), *args], env=env, capture_output=True, text=True)
     log = (t / "log").read_text().split() if (t / "log").exists() else []
+    jf = tree / "optimize" / "run" / "home-switch.json"
+    if jf.exists():
+        log.append("rhb-" + [l for l in jf.read_text().splitlines() if '"role_holder_before"' in l][0].split('"')[3])
+        log.append("journal-" + [l for l in jf.read_text().splitlines() if '"state"' in l][0].split('"')[3])
     if (t / "verifier").exists():
         log.append("final-" + (t / "verifier").read_text().strip())
     shutil.rmtree(t)
@@ -157,6 +185,38 @@ cases = [
      lambda c, o, l: c == 1 and "stopped answering while urtv-home.apk was installing" in o and "uninstall" not in l),
     ("no refusal: the setting is never touched", run("i", 0, "", verifier="1"),
      lambda c, o, l: c == 0 and "put-0" not in l and "Play Protect refused" not in o),
+]
+cases += [
+    ("normal switch: the journal is written, the safety switch is checked alive, then the marker with ITS nonce disarms it",
+     run("w", 0, ""),
+     lambda c, o, l: c == 0 and l.count("hb-check") == 1 and l.index("hb-check") < l.index("switch") and l.count("disarm") == 1
+     and "disarm-wrong" not in l and l[-1] == "journal-done" and "supersede" not in l),
+    ("the safety switch is dead (no heartbeat): the home is NOT switched, nothing changed, the journal says aborted",
+     run("x", 0, "", watchdog="dead"),
+     lambda c, o, l: c == 1 and l.count("hb-check") == 5 and "switch" not in l and "restore-stock" not in l and "disarm" not in l
+     and "NOT switched" in o and l[-1] == "journal-aborted"),
+    ("a restart mid-switch (journal «switching», Home not ours, no marker): the stock home is put back from the journal first, then the switch goes on",
+     run("y", 0, "", seed=("switching", "other.launcher"), seed_home="stock"),
+     lambda c, o, l: c == 0 and "earlier home switch was cut off" in o and l.index("restore-stock") < l.index("arm") and "holder-other" in l
+     and "supersede" in l and l.count("restore-stock") == 1 and l[-1] == "journal-done"),
+    ("a switch that confirmed itself (its marker is on the TV): the journal is not acted on",
+     run("z", 0, "", seed=("switching", ""), seed_home="stock", seed_marker=True),
+     lambda c, o, l: c == 0 and "cut off" not in o and "restore-stock" not in l),
+    ("Home is ours already (the interrupted switch got there): not undone, the install goes on and checks it",
+     run("aa", 0, "", seed=("switching", ""), seed_home="ours"),
+     lambda c, o, l: c == 0 and "cut off" not in o and "restore-stock" not in l),
+    ("a finished switch (journal «done»), Home not ours: not undone by itself (a TV update is not a cut-off switch)",
+     run("ab", 0, "", seed=("done", ""), seed_home="stock"),
+     lambda c, o, l: c == 0 and "cut off" not in o and "restore-stock" not in l),
+    ("the second switch keeps who held Home before the first one (ours is not the «before»)",
+     run("ac", 0, "", seed=("done", "other.launcher"), seed_home="ours", role="sa.urtv.home", script="install.sh", args=("launcher",)),
+     lambda c, o, l: c == 0 and "rhb-other.launcher" in l),
+    ("restore-home.sh: from the journal, the role goes back to who held it, the helpers come back, the journal says restored, ADB is said",
+     run("ad", 0, "", seed=("done", "other.launcher"), seed_home="ours", script="restore-home.sh", args=()),
+     lambda c, o, l: c == 0 and "holder-other" in l and "helpers" in l and l[-1] == "journal-restored" and "needs ADB" in o.replace("this needs ADB", "needs ADB")),
+    ("restore-home.sh without a journal: the way restore.sh does it, and says so",
+     run("ae", 0, "", script="restore-home.sh", args=()),
+     lambda c, o, l: c == 0 and "No journal" in o and "restore-stock" in l),
 ]
 bad = [n for n, (c, o, l), ok in cases if not ok(c, o, l)]
 for n, (c, o, l), ok in cases:
