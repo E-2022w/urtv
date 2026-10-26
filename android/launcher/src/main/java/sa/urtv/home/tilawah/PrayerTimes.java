@@ -53,7 +53,7 @@ final class PrayerTimes {
         local.setTimeInMillis(when.getTimeInMillis());
         long day0 = PrayerMath.midnight(local.get(Calendar.YEAR), local.get(Calendar.MONTH) + 1,
                 local.get(Calendar.DAY_OF_MONTH), place.tz);
-        return of(local, place, hijriMonth(day0) == 9);
+        return of(local, place, hijriMonth(sa.urtv.home.HijriShift.millis(day0, place.hijri)) == 9);
     }
 
     private static PrayerTimes of(Calendar local, Place place, boolean ramadan) {
@@ -94,7 +94,7 @@ final class PrayerTimes {
     static synchronized PrayerTimes today(Context c, Place place) {
         Calendar day = Calendar.getInstance(TimeZone.getTimeZone(place.tz), Locale.US);
         String key = key(day, place);
-        String copyKey = key + "|" + PrayerAdjust.text(place.adj);   // a change of the adjustments is a different day's copy
+        String copyKey = key + "|" + PrayerAdjust.text(place.adj) + (place.hijri == 0 ? "" : "|h" + place.hijri);   // a change of the adjustments is a different day's copy
         if (todayCopy != null && copyKey.equals(todayKey)) return todayCopy;
         PrayerTimes t = of(day, place);
         String saved = prefs(c).getString(key, null);
