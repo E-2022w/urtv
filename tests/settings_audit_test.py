@@ -62,7 +62,7 @@ t, tr = tree(["dock.sh"], secure_accessibility_enabled="0", secure_enabled_acces
 rc, out, log = sh(t, tr, "dock.sh", "sleep-setup")
 check("sleep-setup: what the TV had is recorded once, and the service is added to the list, not replacing it",
       (tr / "optimize/run/accessibility-before.txt").read_text().strip() == "accessibility_enabled=0"
-      and f"put secure enabled_accessibility_services other.app/.Svc:{svc}" in log and "!!" not in out, f"{out} {log}")
+      and f"put secure enabled_accessibility_services 'other.app/.Svc:{svc}'" in log and "!!" not in out, f"{out} {log}")
 t, tr = tree(["dock.sh"])
 rc, out, log = sh(t, tr, "dock.sh", "sleep-setup", refuse="enabled_accessibility_services")
 check("sleep-setup: a TV that does not take the service gets a !! line", "!! enabled_accessibility_services" in out, out)
@@ -70,7 +70,7 @@ check("sleep-setup: an unset switch is recorded as null", (tr / "optimize/run/ac
 
 # reset.sh: our entry leaves the list, the rest stays; with none left the switch goes back to what it was
 src = (ROOT / "optimize/reset.sh").read_text(encoding="utf-8")
-step = src[src.index("# the sleep service (an accessibility"):src.index("# TV Bro and SmartTube")]
+step = src[src.index("# the sleep service (an accessibility"):src.index('echo "3/4 Removing our apps')]
 def reset_step(listing, before):
     t, tr = tree([], secure_enabled_accessibility_services=listing)
     (tr / "optimize/run/accessibility-before.txt").write_text(f"accessibility_enabled={before}\n")
@@ -79,7 +79,16 @@ def reset_step(listing, before):
     subprocess.run(["bash", "-c", script], env=dict(os.environ, T=str(t), PY=str(t / "py")), capture_output=True, text=True)
     return out.read_text().splitlines() if out.exists() else []
 sent = reset_step(f"other.app/.Svc:{svc}", "0")
-check("reset: only our entry leaves the list", sent == ["settings put secure enabled_accessibility_services other.app/.Svc"], str(sent))
+check("reset: only our entry leaves the list (the list in single quotes)", sent == ["settings put secure enabled_accessibility_services 'other.app/.Svc'"], str(sent))
+sent = reset_step(f"other.app/.Svc$Inner:{svc}", "0")
+check("reset: a service with a $ in its name is sent in single quotes, not expanded", sent == ["settings put secure enabled_accessibility_services 'other.app/.Svc$Inner'"], str(sent))
+sent = reset_step(f"other.app/.Svc;reboot:{svc}", "0")
+check("reset: a list with a character the script does not send is not sent (ours stays, and it says so)", not any("put secure enabled" in x for x in sent), str(sent))
+sent = reset_step("null", "0")
+check("reset: the list is already empty (Android dropped our entry): the switch is still put back from the record", sent == ["settings put secure accessibility_enabled 0"], str(sent))
+sent = reset_step("null", "null")
+check("reset: empty list and a switch that was never set: deleted", sent == ["settings delete secure accessibility_enabled"], str(sent))
+check("reset: the sleep service is taken out BEFORE our app is uninstalled (Android would drop it by itself)", src.index("# the sleep service (an accessibility") < src.index('tv "pm uninstall $p"'))
 sent = reset_step(svc, "null")
 check("reset: nothing else left: the list is deleted and the switch is as it was (null: deleted)",
       sent == ["settings delete secure enabled_accessibility_services", "settings delete secure accessibility_enabled"], str(sent))

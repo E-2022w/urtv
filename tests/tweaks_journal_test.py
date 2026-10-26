@@ -24,7 +24,8 @@ apply_line() {
 }
 case "$1" in
   --batch) while read -r l; do echo "$l" >> "$T/batch"; apply_line "$l"; done ;;
-  "settings get global "*) f="$S/${1##* }"; [ -f "$f" ] && cat "$f" || echo null ;;
+  "settings get global "*) k=${1##* }; case " $FAILREAD " in *" $k "*) exit 1 ;; esac; case " $EMPTYREAD " in *" $k "*) exit 0 ;; esac
+                           f="$S/$k"; [ -f "$f" ] && cat "$f" || echo null ;;
   "device_config get activity_manager "*) f="$S/${1##* }"; [ -f "$f" ] && cat "$f" || echo null ;;
   "am get-standby-bucket "*) [ "$UNREADABLE" = yes ] && exit 0; [ -f "$S/standby_bucket" ] && cat "$S/standby_bucket" || echo 10 ;;
   "appops get "*) [ "$UNREADABLE" = yes ] && exit 0; op=${1##* }; [ -f "$S/op_$op" ] && echo "$op: $(cat "$S/op_$op")" || echo "No operations." ;;
@@ -46,8 +47,8 @@ class Tv:
         (self.t / "tv").mkdir()
         for k, v in settings.items():
             (self.t / "tv" / k).write_text(v + "\n")
-    def run(self, mode, refuse="", unreadable=""):
-        env = dict(os.environ, T=str(self.t), PY=str(self.t / "py"), REFUSE=refuse, UNREADABLE=unreadable)
+    def run(self, mode, refuse="", unreadable="", failread="", emptyread=""):
+        env = dict(os.environ, T=str(self.t), PY=str(self.t / "py"), REFUSE=refuse, UNREADABLE=unreadable, FAILREAD=failread, EMPTYREAD=emptyread)
         r = subprocess.run(["bash", str(self.tree / "optimize" / "tweaks.sh"), mode], env=env, capture_output=True, text=True, cwd=self.tree)
         return r.returncode, r.stdout + r.stderr
     def get(self, k):
@@ -56,6 +57,8 @@ class Tv:
     def journal(self):
         f = self.tree / "optimize" / "run" / "tweaks-journal.txt"
         return f.read_text() if f.exists() else None
+    def done(self):
+        return (self.tree / "optimize" / "run" / "tweaks-journal.done").exists()
     def reboot(self):   # device_config does not survive a restart on some sets (seen on a TCL Android 14)
         (self.t / "tv" / "max_cached_processes").unlink(missing_ok=True)
 
@@ -137,4 +140,36 @@ check("restore then keeps today's values and says so with a !! line",
       and tv.get("standby_bucket") == "10" and tv.get("op_RUN_IN_BACKGROUND") == "allow", out)
 tv.run("apply"); rc, out = tv.run("status")
 check("status lists the Play Store's values too", "- tweak standby_bucket: was" in out and "now restricted" in out, out)
+# 9. a read that failed or came back empty is "unknown", never "null": restore must not delete the TV's real value
+for how in ("failread", "emptyread"):
+    tv = Tv(window_animation_scale="0.75", transition_animation_scale="1.0", animator_duration_scale="1.0")
+    rc, out = tv.run("apply", **{how: "window_animation_scale"})
+    check(f"{how}: recorded as unknown (not null), said with a !! line, and the setting is not changed",
+          "window_animation_scale=unknown" in tv.journal() and "window_animation_scale=null" not in tv.journal()
+          and "!! window_animation_scale: could not read" in out and tv.get("window_animation_scale") == "0.75" and tv.get("transition_animation_scale") == "0.5", f"{out} {tv.journal()}")
+    rc, out = tv.run("restore")
+    check(f"{how}: restore leaves that value alone (0.75 stays, nothing deleted) and says so", tv.get("window_animation_scale") == "0.75"
+          and "!! window_animation_scale: what the TV had was not recorded" in out and tv.get("transition_animation_scale") == "1.0", out)
+tv = Tv(window_animation_scale="0.75", transition_animation_scale="1.0", animator_duration_scale="1.0")
+tv.run("apply", failread="window_animation_scale")
+rc, out = tv.run("apply")   # the TV answers now: it was never touched, so 0.75 is its original
+check("a later apply reads an unknown one again, records it, and then changes it", "window_animation_scale=0.75" in tv.journal() and tv.get("window_animation_scale") == "0.5", tv.journal())
+tv.run("restore")
+check("and restore then puts 0.75 back", tv.get("window_animation_scale") == "0.75")
+
+# 10. a second restore does nothing (the first one's journal is kept as .done)
+tv = Tv(window_animation_scale="1.0", transition_animation_scale="1.0", animator_duration_scale="1.0", standby_bucket="30")
+tv.run("apply"); tv.run("restore")
+(tv.t / "tv" / "standby_bucket").write_text("40\n")   # the person (or Android) moved it afterwards
+rc, out = tv.run("restore")
+check("a second restore leaves the restored values alone", tv.done() and tv.journal() is None and tv.get("standby_bucket") == "40" and "nothing to do" in out, out)
+rc, out = tv.run("status")
+check("status says they were already put back", "already put back" in out, out)
+
+# 11. a Play Store exempted from standby (bucket 5) is never changed and never forced
+tv = Tv(window_animation_scale="1.0", transition_animation_scale="1.0", animator_duration_scale="1.0", standby_bucket="5")
+rc, out = tv.run("apply")
+check("an exempted bucket is recorded as exempted and left as it is", "standby_bucket=exempted" in tv.journal() and tv.get("standby_bucket") == "5" and "exempted from standby" in out, out)
+rc, out = tv.run("restore")
+check("and restore does not force it to active", tv.get("standby_bucket") == "5" and "!!" not in out, out)
 sys.exit(1 if failed else 0)
