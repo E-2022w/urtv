@@ -1275,6 +1275,32 @@ for (const [width, height] of [[461, 250], [1920, 1080], [1280, 720], [960, 540]
     && r.count === 3 && r.loaded && r.missingName, JSON.stringify({ requests: seen.length, ...r }));
   await ctx.close();
 }
+{   // a club with no crest beside clubs that have one keeps a crest-wide empty space, so the rows line up; a card with no crest at all is as it was
+  const NO_CRESTS = [['Al-Hilal', 'Al-Nassr', false, false], ['Al-Ahli', 'Al-Ittihad', false, false]];
+  for (const [label, query, width, height] of [['screensaver', 'teams=136013&panel=matches', 1280, 720], ['launcher card', 'teams=136013&panel=matches&widget=1', 1280, 720],
+                                              ['launcher card 960x540', 'teams=136013&panel=matches&widget=1', 960, 540]]) {
+    const { p, ctx, errors } = await open('tv.html', query, { width, height, net: crestNet([]) });
+    await p.evaluate(CREST_GAMES(SHORT_GAMES) + ' renderPanel(false); loadCrests();');
+    await p.waitForTimeout(250);
+    const r = await p.evaluate(() => {
+      const gaps = [...document.querySelectorAll('#week-list .crgap')], cr = document.querySelector('#week-list img.cr');
+      const g = gaps[0], tm = g && g.closest('.tm'), nm = tm && tm.querySelector('.nm');
+      return { gaps: gaps.length, imgs: document.querySelectorAll('#week-list img.cr').length,
+        same: !!g && !!cr && Math.abs(g.getBoundingClientRect().width - cr.getBoundingClientRect().width) < 1.5 && g.getBoundingClientRect().width > 8,
+        beforeName: !!g && g.nextElementSibling === nm };
+    });
+    check(`${label}: a club with no crest among clubs that have one gets a crest-wide empty space before its name, and no picture`,
+      !errors.length && r.gaps === 1 && r.imgs === 3 && r.same && r.beforeName, JSON.stringify(r));
+    await ctx.close();
+    const none = await open('tv.html', query, { width, height, net: crestNet([]) });
+    await none.p.evaluate(CREST_GAMES(NO_CRESTS) + ' renderPanel(false); loadCrests();');
+    await none.p.waitForTimeout(150);
+    const z = await none.p.evaluate(() => ({ gaps: document.querySelectorAll('#week-list .crgap').length, imgs: document.querySelectorAll('#week-list img.cr').length,
+      html: document.getElementById('week-list').innerHTML.includes('crgap') }));
+    check(`${label}: a card with no crest at all has no empty space (as before)`, !none.errors.length && z.gaps === 0 && z.imgs === 0 && !z.html, JSON.stringify(z));
+    await none.ctx.close();
+  }
+}
 for (const [width, height] of [[461, 250], [1920, 1080], [1280, 720], [960, 540]]) {
   for (const digits of ['hindi', 'latin']) {
     const tag = `launcher matches card ${width}x${height} ${digits}`;
