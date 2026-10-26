@@ -14,9 +14,6 @@
 #   optimize/dock.sh sleep                 how the timer stands: minutes left, and what its end will do
 #   optimize/dock.sh sleep cancel          stop it
 #   optimize/dock.sh sleep-setup           turn on the sleep service (an accessibility service, once) so the end turns the screen off
-#   optimize/dock.sh settings-key         the remote's settings key inside other apps (Netflix, YouTube): off or on
-#   optimize/dock.sh settings-key on|off   on: the key opens the TV's settings in any app (needs sleep-setup once); off by default
-#   optimize/dock.sh settings-key test     open the TV's settings now, the way the key would, and say which screen opened
 # The home screen redraws at once; the sleep timer's pill too. Only ADB can do this (sa.urtv.home/.DockReceiver needs the shell's DUMP).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -59,9 +56,6 @@ case "${1:-}:$#" in
     esac
     "$PY" -I optimize/tv.py "settings put secure accessibility_enabled 1" >/dev/null
     echo "the sleep service is on: the end of «مؤقت النوم» turns the screen off" ;;
-  settings-key:1) send SETTINGS_KEY ;;
-  settings-key:2)
-    case "$2" in on|off|test) send SETTINGS_KEY "--es mode $2" ;; *) echo "usage: optimize/dock.sh settings-key [on | off | test]"; exit 1 ;; esac ;;
   names:1) send NAMES ;;
   names-clear:1) send CLEAR_NAMES ;;
   name:*)
@@ -75,5 +69,5 @@ case "${1:-}:$#" in
       shift 2
     done
     send SET_NAMES "--es names '$pairs'" ;;
-  *) sed -n '2,20p' "$0"; exit 1 ;;
+  *) sed -n '2,17p' "$0"; exit 1 ;;
 esac

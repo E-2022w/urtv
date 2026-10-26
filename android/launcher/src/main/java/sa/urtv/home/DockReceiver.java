@@ -24,7 +24,6 @@ import java.util.Map;
  *   am broadcast -n sa.urtv.home/.DockReceiver -a sa.urtv.home.SET_NAMES --es names 'pkg|الاسم;pkg2|'   (empty: back)
  *   am broadcast -n sa.urtv.home/.DockReceiver -a sa.urtv.home.CLEAR_NAMES
  *   am broadcast -n sa.urtv.home/.DockReceiver -a sa.urtv.home.SLEEP_TV [--ei minutes 30 | 0 = cancel]   «مؤقت النوم» for the whole TV
- *   am broadcast -n sa.urtv.home/.DockReceiver -a sa.urtv.home.SETTINGS_KEY [--es mode on|off|test]   the remote's settings key inside apps
  *
  * The answer is in the "data" of am's output. optimize/dock.sh wraps them all. People use «ترتيب المفضلة»
  * (DockActivity) instead.
@@ -85,15 +84,6 @@ public class DockReceiver extends BroadcastReceiver {
                     SleepTimer.start(c, m);
                 }
                 setResultData(SleepTimer.status(c));
-                return;
-            }
-            case "sa.urtv.home.SETTINGS_KEY": {   // opt-in: the settings key opens the TV's settings inside other apps (SleepService)
-                String mode = i.getStringExtra("mode");
-                if ("on".equals(mode) || "off".equals(mode)) SleepService.setSettingsKey(c, "on".equals(mode));
-                else if ("test".equals(mode)) { setResultData("settings-key: " + SleepService.testOpen()); return; }
-                else if (mode != null) { setResultData("error: mode is on, off or test"); return; }
-                setResultData("settings-key: " + (SleepService.settingsKeyOn(c) ? "on" : "off") + " | sleep service: "
-                    + (SleepService.enabled() ? "running" : "off (optimize/dock.sh sleep-setup)"));
                 return;
             }
             case "sa.urtv.home.GET_DOCK":
