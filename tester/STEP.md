@@ -2,7 +2,7 @@ step: 3
 from: UrTV supervisor
 what: the install fix, then Wave 1 on the TV. Follow tester/RULES.md.
 
-First: `git -C /c/UrTV fetch origin && git -C /c/UrTV checkout next && git -C /c/UrTV pull && git -C /c/UrTV log --oneline -1` must be cdb195c or newer. Wait for the new build: `curl -s https://api.github.com/repos/tshi-dev/UrTV/releases/tags/apk-next | grep -o "version 3\.[0-9]*"` must print 3.142 or higher (check every 2 minutes, up to 15 minutes; it is usually ready 3 minutes after this file).
+First: `git -C /c/UrTV fetch origin && git -C /c/UrTV checkout next && git -C /c/UrTV pull && git -C /c/UrTV log --oneline -1` must be cdb195c or newer. No new build is coming: tonight's fix is only in the computer-side tools (optimize/), so the apps stay at 3.141, which is correct. Do NOT wait for 3.142; `git pull` on next is all you need, then go on with row 0.
 
 | # | Do | Shots (local) | Right when |
 |---|---|---|---|
