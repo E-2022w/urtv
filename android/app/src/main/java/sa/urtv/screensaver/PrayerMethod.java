@@ -44,9 +44,9 @@ final class PrayerMethod {
             case "Asia/Qatar": return "قطر";
             case "Asia/Dubai": return "الإمارات";
             case "Asia/Bahrain": case "Asia/Muscat": return "الخليج";
-            case "Africa/Cairo": case "Asia/Damascus": case "Asia/Beirut": case "Asia/Gaza": case "Asia/Hebron": return "الهيئة المصرية للمساحة";
+            case "Africa/Cairo": case "Asia/Damascus": case "Asia/Beirut": case "Asia/Gaza": case "Asia/Hebron": case "Asia/Jerusalem": return "الهيئة المصرية للمساحة";
             case "Asia/Amman": return "وزارة الأوقاف الأردنية";
-            case "Africa/Casablanca": return "وزارة الأوقاف المغربية";
+            case "Africa/Casablanca": case "Africa/El_Aaiun": return "وزارة الأوقاف المغربية";
             case "Africa/Algiers": return "وزارة الشؤون الدينية الجزائرية";
             case "Africa/Tunis": return "وزارة الشؤون الدينية التونسية";
             default: return "أم القرى";

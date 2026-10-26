@@ -29,8 +29,6 @@ public final class HijriShiftRun {
         for (String bad : new String[] {"3", "-3", "x", "1.5", "", "+1", "10", "--1", "٢"})
             check("a bad value (" + bad + ") is 0", HijriShift.fromFragment("a=1&hijri=" + bad) == 0, String.valueOf(HijriShift.fromFragment("a=1&hijri=" + bad)));
         check("a key that only ends in hijri is not it", HijriShift.fromFragment("nothijri=1&xhijri=2") == 0, "");
-        check("millis: 0 is the same instant", HijriShift.millis(123456789L, 0) == 123456789L, "");
-        check("millis: -1 is a day back", HijriShift.millis(2 * 86_400_000L, -1) == 86_400_000L, "");
         Calendar c = Calendar.getInstance(TimeZone.getTimeZone("America/New_York"), Locale.US);
         c.clear();
         c.set(2026, Calendar.MARCH, 7, 23, 30, 0);   // the clocks go forward the next night

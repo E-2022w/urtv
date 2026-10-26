@@ -3852,7 +3852,14 @@ const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','matc
   const cairo0 = await line('tz=Africa%2FCairo', '2026-10-22T21:30:00Z', 'America/New_York');
   check('Cairo near midnight without the setting: 12', cairo0.t === 'الجمعة، ١٢ جمادى الأولى ١٤٤٨ هـ', cairo0.t);
 
-  // Ramadan: month 9 decides the Isha delay, the iftar mode, the occasion card and the fasting suggestion
+  // a spring-forward at midnight (Cairo, 30 April 2027 00:00 -> 01:00): +1 in the last hour before it is still the next day's date
+  const sf0 = await line('tz=Africa%2FCairo', '2027-04-30T10:00:00Z'), sf1 = await line('tz=Africa%2FCairo&hijri=1', '2027-04-29T21:30:00Z');
+  const sfBase = await line('tz=Africa%2FCairo', '2027-04-29T21:30:00Z');
+  const noWd = t => t.replace(/^[^،]*،\s*/, '');
+  check('hijri=1 at 23:30 on the evening before Cairo\'s spring-forward: the next day\'s date, not the same one',
+    noWd(sf1.t) === noWd(sf0.t) && noWd(sf1.t) !== noWd(sfBase.t), `${sf1.t} | next day ${sf0.t} | today ${sfBase.t}`);
+
+  // Ramadan: month 9 decides the iftar mode, the occasion card and the fasting suggestion; the Isha delay never follows the offset (prayer times are the calendar's own)
   const rama = async (hash, now) => {
     const { p, ctx, errors } = await open('tv.html', 'city=الرياض&lat=24.7136&lon=46.6753&tz=Asia%2FRiyadh&' + hash, { now: new Date(now) });
     const r = await p.evaluate(() => {
@@ -3866,12 +3873,15 @@ const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','matc
   const E = '2027-02-07T09:00:00Z', F = '2027-03-09T09:00:00Z';   // 30 Shaaban 1448, and 1 Shawwal 1448 (Riyadh)
   const a0 = await rama('', E), a1 = await rama('hijri=1', E), a2 = await rama('hijri=-1', E);
   check('before Ramadan, no setting: month 8, Isha 90 minutes after Maghrib, Ramadan only tomorrow', a0.month === 8 && a0.gap === 90 && !a0.oc.today && a0.fast.days === 1 && !a0.errors.length, JSON.stringify(a0));
-  check('hijri=1 on 30 Shaaban: Ramadan has begun (month 9, Isha +120, the occasion and the fasting day are Ramadan)',
-    a1.month === 9 && a1.gap === 120 && a1.oc.name === 'رمضان' && a1.oc.today && a1.fast.key === 'ramadan' && a1.fast.days === 0, JSON.stringify(a1));
+  check('hijri=1 on 30 Shaaban: Ramadan looks begun (month 9, the occasion and the fasting day), but Isha stays 90: no prayer time moves',
+    a1.month === 9 && a1.gap === 90 && a1.oc.name === 'رمضان' && a1.oc.today && a1.fast.key === 'ramadan' && a1.fast.days === 0, JSON.stringify(a1));
   check('hijri=-1 on 30 Shaaban: still Shaaban, Isha 90', a2.month === 8 && a2.gap === 90, JSON.stringify(a2));
   const b0 = await rama('', F), b1 = await rama('hijri=-1', F);
   check('1 Shawwal, no setting: the Ramadan Isha is over (90)', b0.month === 10 && b0.gap === 90, JSON.stringify(b0));
-  check('hijri=-1 on 1 Shawwal: Ramadan still goes (month 9, Isha +120)', b1.month === 9 && b1.gap === 120 && b1.oc.name === 'رمضان' && b1.oc.today, JSON.stringify(b1));
+  check('hijri=-1 on 1 Shawwal: Ramadan still looks on (month 9), Isha stays 90 (the real calendar says Shawwal)', b1.month === 9 && b1.gap === 90 && b1.oc.name === 'رمضان' && b1.oc.today, JSON.stringify(b1));
+  const G = '2027-03-08T09:00:00Z';   // the last day of Ramadan 1448: the real month is 9, Isha +120, with any offset
+  const g0 = await rama('', G), g1 = await rama('hijri=1', G);
+  check('the last day of Ramadan: Isha +120 with and without hijri=1 (while the shown month turns to 10)', g0.month === 9 && g0.gap === 120 && g1.month === 10 && g1.gap === 120, JSON.stringify([g0, g1]));
   // the occasion that follows the year: one day earlier with +1, the same one
   const c0 = await rama('', NOW), c1 = await rama('hijri=1', NOW), c2 = await rama('hijri=-2', NOW);
   check('occasion countdown: hijri=1 is one day less, hijri=-2 two days more, the same occasion',

@@ -31,8 +31,8 @@ A = "am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.S
 for v in ("-2", "-1", "0", "1", "+1", "2", "+2"):
     rc, out, sent = run("hijrioffset", v)
     lines = sent.splitlines()
-    check(f"hijrioffset {v}: sent quoted, then the adhan alarm is set again", rc == 0 and lines[0] == A + f"--es hijrioffset '{v}'"
-          and "sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN_RESCHEDULE" in lines[1], sent)
+    check(f"hijrioffset {v}: sent quoted, and nothing else (it never moves a prayer time, so no adhan alarm to set again)",
+          rc == 0 and lines == [A + f"--es hijrioffset '{v}'"], sent)
 for v in ("3", "-3", "+3", "10", "x", "1.5", "", "--1", "1 2", "it's", "١"):
     rc, out, sent = run("hijrioffset", v)
     check(f"hijrioffset {v!r}: refused, nothing sent", rc != 0 and not sent and "usage" in out, f"{rc} {sent!r} {out}")

@@ -88,9 +88,9 @@ final class PrayerMath {
             case "Asia/Qatar": return QATAR;
             case "Asia/Dubai": return DUBAI;
             case "Asia/Bahrain": case "Asia/Muscat": return GULF;
-            case "Africa/Cairo": case "Asia/Damascus": case "Asia/Beirut": case "Asia/Gaza": case "Asia/Hebron": return EGYPT;
+            case "Africa/Cairo": case "Asia/Damascus": case "Asia/Beirut": case "Asia/Gaza": case "Asia/Hebron": case "Asia/Jerusalem": return EGYPT;
             case "Asia/Amman": return JORDAN;
-            case "Africa/Casablanca": return MOROCCO;
+            case "Africa/Casablanca": case "Africa/El_Aaiun": return MOROCCO;
             case "Africa/Algiers": return ALGERIA;
             case "Africa/Tunis": return TUNISIA;
             default: return UMM_AL_QURA;

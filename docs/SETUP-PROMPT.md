@@ -359,6 +359,7 @@ optimize/music.sh adhan fajr-voice <1-21>          # ONLY if I asked for another
 optimize/music.sh adhan short <on or off>        # ONLY if I asked for a short adhan, stopping after its first minute (default off: leave it)
 optimize/music.sh adhan stopkey off              # ONLY if I asked that a key does NOT stop the adhan (default on: any key stops it; leave it)
 optimize/saver.sh hijrioffset <-2 to 2>          # ONLY if I said the Hijri date is a day or two off mine (moon sighting: Egypt, Jordan, the Levant, Morocco) «التاريخ الهجري يتأخر/يتقدم يوم» (default 0: leave it; do not guess it from my country)
+optimize/saver.sh clock24 <on or off>             # ONLY if I asked for a 24-hour clock (19:30 instead of 7:30 م; default off: leave it)
 optimize/saver.sh digits <hindi or latin>        # ONLY if I asked for 123 instead of ١٢٣ (default hindi: leave it)
 optimize/saver.sh markets <up to 4 of tasi, aramco, spx, btc, gold, silver, xrp, comma-separated>   # ONLY if I asked for other markets at the top left (default tasi,spx,btc: leave it)
 optimize/saver.sh markets off                    # ONLY if I asked to hide the markets line at the top and keep just the weather (`markets on` brings it back)

@@ -7,12 +7,11 @@ import java.util.Date;
  * «فرق التاريخ الهجري»: the Hijri date moved by whole days, -2 to +2, for places that start the month by moon sighting. The screensaver's
  * settings hand it over in the fragment as {@code hijri=-1}; nothing there (it is 0, an older screensaver, anything that is not a whole
  * number in range) means no shift. The page reads the same text (CONFIG.hijri). Every place that asks the Umm al-Qura calendar for a
- * date (the home screen's date line, Ramadan's Isha) formats {@code now + offset days} instead of now, so there is one way to shift.
+ * date (the home screen's date line) formats {@code now + offset days} instead of now, so there is one way to shift.
  * No Android in here, so tests/hijri_offset_test.py runs it.
  */
 public final class HijriShift {
     public static final int MAX = 2;
-    private static final long DAY = 86_400_000L;
 
     private HijriShift() { }
 
@@ -30,9 +29,6 @@ public final class HijriShift {
         int v = Integer.parseInt(s);
         return v < -MAX || v > MAX ? 0 : v;
     }
-
-    /** The instant to give the Umm al-Qura calendar: the same one at 0, else that many whole days on (24 hours each). */
-    public static long millis(long ms, int days) { return ms + days * DAY; }
 
     /** The same for a calendar in the city's zone: whole calendar days, so a change of clock cannot move it by an hour. At 0 it is {@code c.getTime()}. */
     public static Date date(Calendar c, int days) {

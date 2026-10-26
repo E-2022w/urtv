@@ -53,7 +53,7 @@ final class PrayerTimes {
         local.setTimeInMillis(when.getTimeInMillis());
         long day0 = PrayerMath.midnight(local.get(Calendar.YEAR), local.get(Calendar.MONTH) + 1,
                 local.get(Calendar.DAY_OF_MONTH), place.tz);
-        return of(local, place, hijriMonth(sa.urtv.home.HijriShift.millis(day0, place.hijri)) == 9);
+        return of(local, place, hijriMonth(day0, place.tz) == 9);
     }
 
     private static PrayerTimes of(Calendar local, Place place, boolean ramadan) {
@@ -94,7 +94,7 @@ final class PrayerTimes {
     static synchronized PrayerTimes today(Context c, Place place) {
         Calendar day = Calendar.getInstance(TimeZone.getTimeZone(place.tz), Locale.US);
         String key = key(day, place);
-        String copyKey = key + "|" + PrayerAdjust.text(place.adj) + (place.hijri == 0 ? "" : "|h" + place.hijri);   // a change of the adjustments is a different day's copy
+        String copyKey = key + "|" + PrayerAdjust.text(place.adj);   // a change of the adjustments is a different day's copy
         if (todayCopy != null && copyKey.equals(todayKey)) return todayCopy;
         PrayerTimes t = of(day, place);
         String saved = prefs(c).getString(key, null);
@@ -255,11 +255,11 @@ final class PrayerTimes {
 
     // ---------------------------------------------------------------- the Islamic month
 
-    /** 9 in Ramadan, from the Umm al-Qura calendar the whole project uses. */
-    private static int hijriMonth(long millis) {
+    /** 9 in Ramadan, from the Umm al-Qura calendar the whole project uses, never shifted by «فرق التاريخ الهجري»: prayer times do not follow it. */
+    private static int hijriMonth(long millis, String tz) {
         try {
             android.icu.util.Calendar cal = android.icu.util.Calendar.getInstance(
-                    new android.icu.util.ULocale("en-u-ca-islamic-umalqura"));
+                    android.icu.util.TimeZone.getTimeZone(tz), new android.icu.util.ULocale("en-u-ca-islamic-umalqura"));   // the city's day, not the device's
             cal.setTimeInMillis(millis);
             return cal.get(android.icu.util.Calendar.MONTH) + 1;
         } catch (Throwable t) {

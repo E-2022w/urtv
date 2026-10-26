@@ -30,6 +30,6 @@ public final class AdhanSync {
     }
 
     private static String identity(Place p) {
-        return PrayerMath.identity(p.lat, p.lng, p.tz, PrayerAdjust.text(p.adj), p.method) + (p.hijri == 0 ? "" : "|h" + p.hijri);
+        return PrayerMath.identity(p.lat, p.lng, p.tz, PrayerAdjust.text(p.adj), p.method);
     }
 }
