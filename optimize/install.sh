@@ -338,7 +338,14 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
   }
 
 
-  rc=0; switch_home || rc=$?
+  # Home is already ours and no switch was cut off: there is nothing to switch and nothing to protect (no safety switch, no journal)
+  already=no
+  res=$("$PY" -I optimize/tv.py "cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN" 2> /dev/null) || res=""
+  if grep -q sa.urtv.home <<< "$res" && [ "$(jget state)" != switching ]; then
+    already=yes
+    echo "Home is already the new launcher: nothing to switch, so no safety switch is started."
+  fi
+  rc=0; if [ "$already" = yes ]; then :; else switch_home || rc=$?; fi
   if [ "$rc" = 1 ]; then   # ADB dropped: wait for the TV, see what Home is now, and go on or start the switch again
     back=no
     for _ in $(seq 36); do   # every 10 s, about 6 minutes
