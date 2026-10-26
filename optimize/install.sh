@@ -184,6 +184,12 @@ if [ "$what" = saver ] || [ "$what" = all ]; then
       "settings put secure screensaver_default_component sa.urtv.screensaver/.ScreenDream" \
       "am start --activity-clear-task -n sa.urtv.screensaver/.SettingsActivity" \
       | "$PY" -I optimize/tv.py --batch
+    # read back: some firmware keeps its own screensaver whatever is written (reset.sh puts back what backup.sh recorded)
+    got=$("$PY" -I optimize/tv.py "settings get secure screensaver_components" 2> /dev/null | tr -d '\r' | tail -n 1) || got=""
+    case "$got" in
+      *sa.urtv.screensaver/*) ;;
+      *) echo "!! screensaver_components: this TV did not take our screensaver (it says ${got:-nothing}); choose it in the TV's own settings (Settings, Device Preferences, Screen saver)" ;;
+    esac
     echo "Screensaver installed and selected. Its settings screen is open on the TV."
   fi
 fi

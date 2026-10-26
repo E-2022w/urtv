@@ -48,13 +48,24 @@ case "${1:-}:$#" in
     send SLEEP_TV "--ei minutes $minutes" ;;
   sleep-setup:1)
     svc="sa.urtv.home/sa.urtv.home.SleepService"
-    now=$("$PY" -I optimize/tv.py "settings get secure enabled_accessibility_services" | tail -n 1 | tr -d '\r')
+    cur=$("$PY" -I optimize/tv.py "settings get secure enabled_accessibility_services; settings get secure accessibility_enabled" | tr -d '\r')
+    now=$(sed -n 1p <<< "$cur")
+    # what the TV had, once (optimize/reset.sh takes our entry out again and puts the switch back as it was)
+    if [ ! -f "${URTV_RUN_DIR:-optimize/run}/accessibility-before.txt" ]; then
+      mkdir -p "${URTV_RUN_DIR:-optimize/run}"
+      printf 'accessibility_enabled=%s\n' "$(sed -n 2p <<< "$cur")" > "${URTV_RUN_DIR:-optimize/run}/accessibility-before.txt"
+    fi
+    # the list goes to the TV's shell in single quotes (a service like pkg/.Svc$Inner must not have its $Inner expanded)
     case "$now" in
       *"$svc"*) echo "the sleep service was already on" ;;
-      null|"") "$PY" -I optimize/tv.py "settings put secure enabled_accessibility_services $svc" >/dev/null ;;
-      *) "$PY" -I optimize/tv.py "settings put secure enabled_accessibility_services $now:$svc" >/dev/null ;;
+      null|"") "$PY" -I optimize/tv.py "settings put secure enabled_accessibility_services '$svc'" >/dev/null ;;
+      *) if [[ "$now" =~ ^[A-Za-z0-9_.\$/:]+$ ]]; then
+           "$PY" -I optimize/tv.py "settings put secure enabled_accessibility_services '$now:$svc'" >/dev/null
+         else echo "!! enabled_accessibility_services: the list on this TV has a character this script does not send, so the sleep service was not added"; exit 1; fi ;;
     esac
     "$PY" -I optimize/tv.py "settings put secure accessibility_enabled 1" >/dev/null
+    after=$("$PY" -I optimize/tv.py "settings get secure enabled_accessibility_services" | tail -n 1 | tr -d '\r')
+    case "$after" in *"$svc"*) ;; *) echo "!! enabled_accessibility_services: this TV did not take the sleep service (it says ${after:-nothing}); the timer's end will not turn the screen off" ;; esac
     echo "the sleep service is on: the end of «مؤقت النوم» turns the screen off" ;;
   names:1) send NAMES ;;
   names-clear:1) send CLEAR_NAMES ;;
