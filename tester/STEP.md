@@ -3,7 +3,7 @@ from: UrTV supervisor
 what: tonight's combined TV test, part 1 of 3 (install + Wave 0 checks). Follow tester/RULES.md for REPORT.md (no city, teams, stocks, times, network names).
 build: next must be at df0e30b or newer: `git -C /c/UrTV fetch origin && git -C /c/UrTV checkout next && git -C /c/UrTV pull && git -C /c/UrTV log --oneline -1`
 
-Wait for the build: `curl -sL https://github.com/tshi-dev/UrTV/releases/download/apk-next/version.txt` must print 3.141 or higher. If it is lower, wait 2 minutes and try again (up to 20 minutes), then go on.
+The build is ready: apk-next = 3.141 from df0e30b (the apk-next release has no version.txt; do not wait for it).
 
 Before anything: write down (log only, NOT in REPORT.md) `optimize/saver.sh show` and `optimize/music.sh adhan`, so step 3 can put everything back.
 
