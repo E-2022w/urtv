@@ -448,7 +448,7 @@ public class MainActivity extends Activity {
         nowCard.setId(View.generateViewId());
         nowCard.setVisibility(View.GONE);
         nowCard.setOnClickListener(v -> NowPlaying.toggle(this));   // OK: pause or play
-        nowCard.setOnLongClickListener(v -> { startActivity(NowPlaying.player(this)); return true; });   // a long OK: the player
+        nowCard.setOnLongClickListener(v -> { launchGuarded(ParentalPolicy.PILL_LISTEN, NowPlaying.player(this), "تلاوة وأذان"); return true; });   // a long OK: the player, behind the same lock as the «تلاوة وأذان» pill
         nowCard.setOnFocusChangeListener((v, has) -> {
             if (has) { lastFocusedId = v.getId(); scroll.smoothScrollTo(0, 0); fadeGlow(1f); }
         });

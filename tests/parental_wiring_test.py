@@ -45,8 +45,10 @@ for fn, inner in sites.items():
             bad.append(f"{i + 1}: {l.strip()[:90]}")
     check(f"MainActivity: every {fn}(…) is behind the family lock", not bad, bad)
 starts = [i for i, l in enumerate(main) if "startActivity(" in l]
-check("MainActivity: startActivity only in launch(), and in the long OK on «يُتلى الآن» (our own player, not an app)",
-      all(enclosing(main, i) == "launch" or "NowPlaying.player" in main[i] for i in starts), [main[i].strip() for i in starts])
+check("MainActivity: startActivity only in launch(): nothing opens without going through it",
+      all(enclosing(main, i) == "launch" for i in starts), [main[i].strip() for i in starts])
+check("the long OK on «يُتلى الآن» opens the player behind the «تلاوة وأذان» lock (not around it)",
+      any("nowCard.setOnLongClickListener" in l and "launchGuarded(ParentalPolicy.PILL_LISTEN, NowPlaying.player(this)" in l for l in main))
 check("the home screen's key handling asks the menu key's «المصادر» through the lock too", "showInputs(pills.get(0), ParentalPolicy.MENU_KEY)" in "\n".join(main))
 paths = re.search(r"static final int (TILE = 0.*?);", policy, re.S).group(1)
 names = re.findall(r"([A-Z_]+) = ", paths) 
