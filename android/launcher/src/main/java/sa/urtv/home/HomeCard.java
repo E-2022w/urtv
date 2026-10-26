@@ -88,14 +88,13 @@ final class HomeCard {
             if (!guard.mayCreate(System.currentTimeMillis())) return;   // its renderer keeps dying: the cards stay off for now
             create(want);
         }
-        web.onResume();
-        web.resumeTimers();
+        web.onResume();   // not resumeTimers(), which is process-wide
     }
 
-    /** onPause: no timers or network while an app is in front. */
+    /** onPause: this view only; not pauseTimers(), which is process-wide (every WebView of the launcher process). */
     void pause() {
         resumed = false;
-        if (web != null) { web.onPause(); web.pauseTimers(); }
+        if (web != null) web.onPause();
     }
 
     void destroy() {

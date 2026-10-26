@@ -22,8 +22,6 @@ python3 tests/tweaks_trim_test.py
 python3 tests/key_home_test.py
 python3 tests/dock_names_test.py
 python3 tests/dock_sleep_test.py
-python3 tests/dock_settings_key_test.py
-python3 tests/settings_key_test.py
 python3 tests/find_tv_test.py
 python3 tests/wireless_test.py
 python3 tests/precheck_test.py

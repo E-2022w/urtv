@@ -33,11 +33,17 @@ CASES = [
     ("city=Riyadh", "none", "city=Riyadh", "tasks", "off"),                                                           # «بدون»: no card, so nothing live
 ]
 
+# pause/resume touch this card's WebView only: pauseTimers()/resumeTimers() are process-wide
+card = (ROOT / "android/launcher/src/main/java/sa/urtv/home/HomeCard.java").read_text(encoding="utf-8")
+code = card.replace("not pauseTimers()", "").replace("not resumeTimers()", "")
+card_ok = "pauseTimers" not in code and "resumeTimers" not in code and "web.onPause();" in code and "web.onResume();" in code
+print(("PASS " if card_ok else "FAIL ") + "HomeCard: pause() and refresh() use onPause()/onResume() only, never the process-wide pauseTimers()/resumeTimers()")
+
 javac, java = shutil.which("javac"), shutil.which("java")
 if not (javac and java):
     print("SKIP HomeCardChoice.java: no javac here (CI's Build APKs compiles it)")
-    sys.exit(0)
-failed = 0
+    sys.exit(0 if card_ok else 1)
+failed = 0 if card_ok else 1
 with tempfile.TemporaryDirectory() as tmp:
     r = subprocess.run([javac, "-encoding", "UTF-8", "-d", tmp, str(SRC), str(ROOT / "tests/HomeCardChoiceRun.java")], capture_output=True, text=True)
     ok = r.returncode == 0
