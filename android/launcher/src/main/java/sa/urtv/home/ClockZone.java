@@ -85,9 +85,8 @@ final class ClockZone {
         return label(city) + (calendar.isEmpty() ? "" : " · " + calendar);
     }
 
-    /** The line shows when the city's clock is not the TV's, when the calculation is not Umm al-Qura, or when the greeting (whose
-     *  weather line names the city) is off: the city is then always on the home screen somewhere. */
-    static boolean showLine(boolean differs, String calendar, boolean greetingOn) {
-        return differs || !calendar.isEmpty() || !greetingOn;
+    /** The line shows when the city's clock is not the TV's, or when the calculation is not Umm al-Qura (its name is then worth saying). */
+    static boolean showLine(boolean differs, String calendar) {
+        return differs || !calendar.isEmpty();
     }
 }

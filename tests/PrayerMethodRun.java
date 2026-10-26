@@ -48,7 +48,8 @@ public final class PrayerMethodRun {
                 && Location.COUNTRIES.length == PrayerMethod.SEARCH_COUNTRIES.length, "");
         // the first-run note: while the city was never set, the first three starts
         check("note: due on the first three starts while no city was set, never once one was",
-                Location.noteDue(false, 0) && Location.noteDue(false, 2) && !Location.noteDue(false, 3) && !Location.noteDue(true, 0), "");
+                Location.noteDue(true, false, 0) && Location.noteDue(true, false, 2) && !Location.noteDue(true, false, 3) && !Location.noteDue(true, true, 0), "");
+        check("note: never on a TV that had the app before and was updated, whatever its city", !Location.noteDue(false, false, 0) && !Location.noteDue(false, true, 0), "");
         check("note: its words", Location.note("الرياض").equals("المدينة: الرياض. لتغييرها: الإعدادات ← الموقع"), Location.note("الرياض"));
         System.exit(failed == 0 ? 0 : 1);
     }

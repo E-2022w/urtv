@@ -394,8 +394,8 @@ public class MainActivity extends Activity {
         date = text(14, "regular", 0xFFC6BBA4);
         date.setSingleLine(true);
         left.addView(date, llp(-2, -2, 0, dp(-6), dp(4), 0));   // the display font leaves a deep gap under its digits
-        // «بتوقيت دبي» (with «· حساب الخليج» when the calculation is not Umm al-Qura), when the city's clock is not the TV's, the
-        // calculation is not Umm al-Qura, or the greeting's weather line (which names the city) is off: ClockZone.showLine
+        // «بتوقيت دبي» (with «· حساب الخليج» when the calculation is not Umm al-Qura), when the city's clock is not the TV's or the
+        // calculation is not Umm al-Qura: ClockZone.showLine
         zoneLine = text(12, "regular", GOLD);
         zoneLine.setSingleLine(true);
         zoneLine.setVisibility(View.GONE);
@@ -974,7 +974,7 @@ public class MainActivity extends Activity {
         clock.setText(arabicDigits(hh + ":" + String.format(Locale.ROOT, "%02d", now.get(Calendar.MINUTE))));
         ampm.setText(h < 12 ? "ص" : "م");
         String cal = zone == null ? "" : ClockZone.calendar(zone[1], zone[2]);
-        boolean other = zone != null && ClockZone.showLine(ClockZone.differs(tvTz, tz, ms), cal, cfg.greetingOn);
+        boolean other = zone != null && ClockZone.showLine(ClockZone.differs(tvTz, tz, ms), cal);
         zoneLine.setVisibility(other ? View.VISIBLE : View.GONE);
         if (other) zoneLine.setText(ClockZone.label(zone[0], cal));
         if (gregFormat == null) {

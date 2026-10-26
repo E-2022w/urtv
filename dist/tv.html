@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- the build: UTC time (YYYYMMDDHHMMSS) of the newest commit of the page's sources, put in by src/build.py. The app loads the page with the newer stamp (its own
      copy or a downloaded one), never by file time, and does not keep a download whose stamp is older than its own (Updater, PageStamp). -->
-<meta name="urtv-build" content="20261026092202">
+<meta name="urtv-build" content="20261026105957">
 <title>شاشة تلفزيونك</title>
 <style>
   @font-face{font-family:'Thmanyah';font-weight:300;font-style:normal;font-display:block;src:url("https://raw.githubusercontent.com/tshi-dev/UrTV/master/assets/fonts/Thmanyah-Light.woff2") format("woff2")}
@@ -2601,16 +2601,14 @@ function shortHM(sec){   // «١ س و ٥ د», «٢ س», «٥ د»
   const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
   return [h ? ar(h) + ' س' : '', m || !h ? ar(Math.max(m, 1)) + ' د' : ''].filter(Boolean).join(' و ');
 }
-// ---- «الصلاة القادمة»: one line, «المغرب ٥:٢١ م · بعد ساعة و ٩ دقائق», the calm one of the prayer cards (after Isha: tomorrow's Fajr)
+// ---- «الصلاة القادمة»: one line, «المغرب ٥:٢١ م · بعد ١ ساعة و ٩ دقائق», the calm one of the prayer cards (after Isha: tomorrow's Fajr)
 function nextPrayerRows(){
   if(!PRAYERS.length) return [];
   const p = riyadhParts(), mins = p.h * 60 + p.mi + p.s / 60;
   let n = PRAYERS.find(x => x.h * 60 + x.mi > mins), tomorrow = false;
   if(!n){ n = PRAYERS[0]; tomorrow = true; }
-  // the same whole minutes as the bar (untilAdhan), in the card's words: «ساعة و ٩ دقائق», not «١ ساعة»
-  const sec = Math.max(60, Math.round((n.h * 60 + n.mi + (tomorrow ? 1440 : 0) - mins) * 60)), h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
-  const word = (k, u) => k === 1 ? u.one : qty(k, u);
-  const left = [h ? word(h, UNIT.hour) : '', m || !h ? word(m, UNIT.min) : ''].filter(Boolean).join(' و ');
+  // in the words of the bar and of the screensaver's own «الصلاة القادمة» (untilAdhan): the same minutes at the same second
+  const left = untilAdhan(n.h * 60 + n.mi + (tomorrow ? 1440 : 0) - mins);
   return [`<li class="np"><b>${prayerName(n)}</b><span class="t">${fmt12(n.h, n.mi)}</span><span class="r">· بعد ${left}</span></li>`];
 }
 

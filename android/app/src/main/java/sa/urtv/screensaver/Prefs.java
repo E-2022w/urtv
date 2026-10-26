@@ -364,15 +364,18 @@ final class Prefs {
     /** Was a city ever set, from the settings or the computer? Until then it is the install's Riyadh (Location.note). */
     boolean cityChosen() { return sp.contains("cityName"); }
 
+    /** The first-run note is due now (Location.noteDue): the settings' top row and the screensaver's start ask the same. */
+    boolean cityNoteDue() { return Location.noteDue(FreshInstall.is(ctx), cityChosen(), sp.getInt("cityNoteShown", 0)); }
+
     /**
-     * The screensaver as it starts: the page, and #citynote=1 for its first three starts while no city was ever set (each such start
-     * is counted). Not in fragment(): the launcher's cards never show it.
+     * The screensaver's page, with #citynote=1 while the note is due. start: a real start of the screensaver (ScreenDream attached),
+     * the only thing that counts toward its three; the settings' preview shows it without counting. Not in fragment(): the launcher's
+     * cards never show it.
      */
-    String screenUrl(Context c) {
+    String screenUrl(Context c, boolean start) {
         String url = dashboardUrl(c);
-        int shown = sp.getInt("cityNoteShown", 0);
-        if (!Location.noteDue(cityChosen(), shown)) return url;
-        sp.edit().putInt("cityNoteShown", shown + 1).apply();
+        if (!cityNoteDue()) return url;
+        if (start) sp.edit().putInt("cityNoteShown", sp.getInt("cityNoteShown", 0) + 1).apply();
         return url + "&citynote=1";
     }
 

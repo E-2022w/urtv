@@ -68,6 +68,15 @@ for mid, fa, ia, im, mg, tune in re.findall(r"new Method\((\w+), ([\d.]+), ([\d.
     jl[ids[mid]] = (float(fa), float(ia), int(im), float(mg), tuple(int(x) for x in tune.replace(" ", "").split(",") if x) or (0, 0, 0, 0))
 check("page and launcher have the same six methods with the same angles, delays and margins", len(jv) == 6 and jv == jl, f"{jv}\n{jl}")
 
+# the first-run note: one gate (Location.noteDue, with the fresh-install test), counted only when the dream itself starts
+app = ROOT / "android/app/src/main/java/sa/urtv/screensaver"
+prefs_src, dream, preview, settings = ((app / n).read_text(encoding="utf-8") for n in ("Prefs.java", "ScreenDream.java", "MainActivity.java", "SettingsActivity.java"))
+check("note: Prefs asks Location.noteDue with the fresh-install test, and the settings ask Prefs",
+      "Location.noteDue(FreshInstall.is(ctx), cityChosen()," in prefs_src and "i.firstInstallTime == i.lastUpdateTime" in (app / "FreshInstall.java").read_text(encoding="utf-8") and "if (prefs.cityNoteDue()) line(" in settings)
+check("note: a start is counted only from the dream attaching (not the preview, not a renderer's re-creation)",
+      dream.count("show(true)") == 1 and "super.onAttachedToWindow();" in dream.split("show(true)")[0] and "show(false)" in dream
+      and "ScreenView.create(this, this::gone, false)" in preview and "if (start) sp.edit().putInt(\"cityNoteShown\"" in prefs_src)
+
 if shutil.which("javac"):
     src = ROOT / "android/app/src/main/java/sa/urtv/screensaver"
     with tempfile.TemporaryDirectory() as tmp:

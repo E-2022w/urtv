@@ -121,7 +121,7 @@ public class SettingsActivity extends Activity {
         sp0.setMarginStart(dp(20));
         head.addView(sub, sp0);
         list.addView(head);
-        if (!prefs.cityChosen()) line(Location.note(prefs.city()[0]), 0xFFD6AF6B, dp(14));   // still the install's Riyadh: say where to change it
+        if (prefs.cityNoteDue()) line(Location.note(prefs.city()[0]), 0xFFD6AF6B, dp(14));   // still the install's Riyadh: say where to change it
 
         row("معاينة الشاشة", "شاهد الشاشة الآن", R.drawable.ic_play, new Runnable() { public void run() {
             startActivity(new Intent(SettingsActivity.this, MainActivity.class)); } }).requestFocus();

@@ -736,7 +736,9 @@ const stkRows = p => p.evaluate(() => ({ hd: document.getElementById('week-hd').
   check('stocks: a day line from the intraday closes', r.rows[0].pts === 20 && r.rows[1].pts === 20, JSON.stringify(r.rows.map(x => x.pts)));
   check('stocks: asked as 15-minute bars of one day; codes get .SR', seen.some(s => s === '2222.SR?interval=15m&range=1d') && seen.some(s => s.startsWith('AAPL?')) && !seen.some(s => s.startsWith('2222?')), seen.join(' '));
   check('stocks: market open for Tadawul, US row marked closed (the header says nothing)', r.hd === 'الأسهم' && r.rows[2].closed && !r.rows[0].closed, JSON.stringify(r.rows.map(x => x.closed)));
-  await p.evaluate(at('2026-10-23T09:00:00Z'));          // Friday noon: both closed
+  // Friday 08:00 in Riyadh: both closed. Within 24 hours of the Thursday 08:00 above, so prices fetched after that moment was set (the
+  // first load can land either side of it) are not yet «غير محدّث»
+  await p.evaluate(at('2026-10-23T05:00:00Z'));
   await p.evaluate('renderPanel(false)');
   r = await stkRows(p);
   check('stocks: «السوق مغلق» in the header when every market is closed, last close still shown', r.hd === 'الأسهم' + 'السوق مغلق' && r.rows[0].px === '٢٦٫٣٠' && !r.rows.some(x => x.closed), JSON.stringify(r));
@@ -1591,12 +1593,12 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   }
 }
 
-// ---- «الصلاة القادمة»: one line, «المغرب ٥:٤٥ م · بعد ساعة و ٥ دقائق», the name lit; every style, three sizes, both digit systems
+// ---- «الصلاة القادمة»: one line, «المغرب ٥:٤٥ م · بعد ١ ساعة و ٥ دقائق» (the panel's and the bar's words), the name lit; every style, three sizes, both digit systems
 {
   const TIMES = "buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'19:15'});";
   for (const [when, want, label] of [
-      ['2026-10-22T13:40:00Z', 'المغرب٥:٤٥ م· بعد ساعة و ٥ دقائق', 'Thursday 16:40'],
-      ['2026-10-23T07:00:00Z', 'الجمعة١١:٤٠ ص· بعد ساعة و ٤٠ دقيقة', 'Friday morning: الجمعة'],
+      ['2026-10-22T13:40:00Z', 'المغرب٥:٤٥ م· بعد ١ ساعة و ٥ دقائق', 'Thursday 16:40'],
+      ['2026-10-23T07:00:00Z', 'الجمعة١١:٤٠ ص· بعد ١ ساعة و ٤٠ دقيقة', 'Friday morning: الجمعة'],
       ['2026-10-22T14:40:00Z', 'المغرب٥:٤٥ م· بعد ٥ دقائق', 'five minutes before Maghrib'],
       ['2026-10-22T17:10:00Z', 'الفجر٤:٥٠ ص· بعد ٨ ساعات و ٤٠ دقيقة', 'after Isha: tomorrow\'s Fajr']]) {
     for (const [hash, width, height] of [['panel=nextprayer', 1920, 1080], ['panel=nextprayer', 1280, 720], ['panel=nextprayer', 960, 540], ['panel=nextprayer&widget=1', 461, 250]]) {
@@ -1613,6 +1615,10 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
               inside: parts.every(x => { const b = x.getBoundingClientRect(); return b.left >= card.left - 1 && b.right <= card.right + 1 && b.bottom <= card.bottom + 1; }),
               h: Math.round(np ? np.getBoundingClientRect().height : 0), font: np ? parseFloat(getComputedStyle(np).fontSize) : 0 };
           });
+          if (!hash.includes('widget')) {   // the screensaver's own «الصلاة القادمة» panel says the same time left in the same words
+            const panel = await p.evaluate(() => { tickPrayer(); return document.getElementById('prayer-count')?.textContent || ''; });
+            check(`next prayer ${label} ${width}x${height} ${style} ${digits}: the card's time left is the panel's, word for word`, r.text.endsWith(panel.replace(/^.*?(بعد )/, '$1')) && /بعد/.test(panel), panel + ' | ' + r.text);
+          }
           const toLatin = x => x.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
           const tag = `next prayer ${label} ${width}x${height}${hash.includes('widget') ? ' card' : ''} ${style} ${digits}`;
           check(`${tag}: one line «${want}» under «الصلاة القادمة», the name lit, inside the card, no script errors`,

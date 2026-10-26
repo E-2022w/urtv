@@ -15,7 +15,7 @@ final class Location {
     };
     /** the screensaver's first starts that show the note */
     static final int NOTE_STARTS = 3;
-    static final String HELP = "الموقع يحدد المدينة؛ طريقة الحساب تحدد مواقيت الصلاة";
+    static final String HELP = "المدينة تحدد الوقت والطقس؛ طريقة الحساب تحدد مواقيت الصلاة";
 
     private Location() { }
 
@@ -40,8 +40,11 @@ final class Location {
         return out.toArray(new Cities.Region[0]);
     }
 
-    /** Is the note due at this start? Only while no city was ever set (from the settings or the computer), for the first three starts. */
-    static boolean noteDue(boolean chosen, int shown) { return !chosen && shown < NOTE_STARTS; }
+    /**
+     * Is the note due? Only on a TV that got this app fresh (never on one that was already installed and updated: stable first), while no
+     * city was ever set (from the settings or the computer), for the first three starts. The one place to change who sees it.
+     */
+    static boolean noteDue(boolean freshInstall, boolean chosen, int shown) { return freshInstall && !chosen && shown < NOTE_STARTS; }
 
     /** «المدينة: الرياض. لتغييرها: الإعدادات ← الموقع», on the screensaver and in the settings' top row. */
     static String note(String city) { return "المدينة: " + city + ". لتغييرها: الإعدادات ← الموقع"; }

@@ -15,13 +15,12 @@ parse	lat=1&lon=2	|Asia/Riyadh	no city, no zone
 parse	city=%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9&tz=Africa%2FCairo	القاهرة|Africa/Cairo	another city
 # label: the city -> the small line under the clock
 label	دبي	بتوقيت دبي	as the screensaver's
-# line: city, zone, pm, the clocks differ (1/0), the greeting on (1/0) -> the home screen's line under the clock ("-" = not shown)
-line	الرياض	Asia/Riyadh		0	1	-	Riyadh, Umm al-Qura, greeting on: no line, today's look
-line	الرياض	Asia/Riyadh		1	1	بتوقيت الرياض	a TV on another zone: as before
-line	المنامة	Asia/Bahrain		0	1	بتوقيت المنامة · حساب الخليج	Bahrain: its calculation named
-line	الدوحة	Asia/Qatar		0	1	بتوقيت الدوحة · حساب قطر	Qatar
-line	مدينة الكويت	Asia/Kuwait		0	1	بتوقيت مدينة الكويت · حساب الكويت	Kuwait
-line	دبي	Asia/Dubai		1	1	بتوقيت دبي · حساب الإمارات	the UAE, another zone
-line	مسقط	Asia/Muscat		0	1	بتوقيت مسقط · حساب الخليج	Oman
-line	القطيف	Asia/Riyadh	jafari	0	1	بتوقيت القطيف · الحساب الجعفري	the Ja'fari method, anywhere
-line	الرياض	Asia/Riyadh		0	0	بتوقيت الرياض	greeting off: the city is said under the clock
+# line: city, zone, pm, the clocks differ (1/0) -> the home screen's line under the clock ("-" = not shown)
+line	الرياض	Asia/Riyadh		0	-	Riyadh, Umm al-Qura: no line, today's look (the greeting is not asked)
+line	الرياض	Asia/Riyadh		1	بتوقيت الرياض	a TV on another zone: as before
+line	المنامة	Asia/Bahrain		0	بتوقيت المنامة · حساب الخليج	Bahrain: its calculation named
+line	الدوحة	Asia/Qatar		0	بتوقيت الدوحة · حساب قطر	Qatar
+line	مدينة الكويت	Asia/Kuwait		0	بتوقيت مدينة الكويت · حساب الكويت	Kuwait
+line	دبي	Asia/Dubai		1	بتوقيت دبي · حساب الإمارات	the UAE, another zone
+line	مسقط	Asia/Muscat		0	بتوقيت مسقط · حساب الخليج	Oman
+line	القطيف	Asia/Riyadh	jafari	0	بتوقيت القطيف · الحساب الجعفري	the Ja'fari method, anywhere
