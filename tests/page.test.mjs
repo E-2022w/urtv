@@ -3663,6 +3663,65 @@ const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','matc
   await ctx.close();
 }
 
+// ---- «فرق التاريخ الهجري»: #hijri=-2..2 moves every Hijri date by whole days (moon-sighting countries); 0, nothing or a bad value changes nothing
+{
+  const line = async (hash, now, tzId) => {
+    const { p, ctx, errors } = await open('tv.html', hash, { now: new Date(now), tzId });
+    const t = await p.evaluate(() => document.getElementById('hijri').textContent);
+    const cfg = await p.evaluate(() => CONFIG.hijri);
+    await ctx.close();
+    return { t, cfg, errors };
+  };
+  const NOW = '2026-10-23T09:00:00Z';   // الجمعة ١٢ جمادى الأولى ١٤٤٨ (Riyadh)
+  const base = await line('tz=Asia%2FRiyadh', NOW);
+  check('hijri offset 0 (nothing in the settings): exactly the text it always had', base.t === 'الجمعة، ١٢ جمادى الأولى ١٤٤٨ هـ' && base.cfg === 0 && !base.errors.length, base.t + ' ' + base.errors.join('; '));
+  for (const [v, day] of [['-2', '١٠'], ['-1', '١١'], ['1', '١٣'], ['2', '١٤']]) {
+    const r = await line('tz=Asia%2FRiyadh&hijri=' + v, NOW);
+    check(`hijri=${v}: the Hijri day moves to ${day}, today's weekday stays`, r.t === `الجمعة، ${day} جمادى الأولى ١٤٤٨ هـ` && r.cfg === +v && !r.errors.length, r.t);
+  }
+  const same = await line('tz=Asia%2FRiyadh&hijri=0', NOW);
+  check('hijri=0 is the same text as no setting, byte for byte', same.t === base.t, same.t);
+  for (const bad of ['3', '-3', 'x', '1.5', '', '+1', '١', '10']) {
+    const r = await line('tz=Asia%2FRiyadh&hijri=' + encodeURIComponent(bad), NOW);
+    check(`hijri=${JSON.stringify(bad)}: a bad value is 0 (the text as always)`, r.t === base.t && r.cfg === 0, r.t + ' ' + r.cfg);
+  }
+  const latin = await line('tz=Asia%2FRiyadh&digits=latin&hijri=-1', NOW);
+  check('hijri=-1 with digits=latin: 11 in Latin digits', /، 11 /.test(latin.t) && !/[٠-٩]/.test(latin.t), latin.t);
+  // the end of a month and the year: 30 Shaaban + 1 is 1 Ramadan; the year changes with the month
+  const mo = await line('tz=Asia%2FRiyadh&hijri=2', '2027-02-07T09:00:00Z');
+  check('hijri=2 over a month end: 30 شعبان + 2 is 2 رمضان', mo.t === 'الأحد، ٢ رمضان ١٤٤٨ هـ', mo.t);
+  // the city's day, not the computer's: Cairo is already on 23 October at 21:30 UTC though the computer (New York) is on 22nd
+  const cairo = await line('tz=Africa%2FCairo&hijri=1', '2026-10-22T21:30:00Z', 'America/New_York');
+  check('hijri=1 in Cairo near midnight: the city\'s day (23 Oct = 12) plus one is 13', cairo.t === 'الجمعة، ١٣ جمادى الأولى ١٤٤٨ هـ', cairo.t);
+  const cairo0 = await line('tz=Africa%2FCairo', '2026-10-22T21:30:00Z', 'America/New_York');
+  check('Cairo near midnight without the setting: 12', cairo0.t === 'الجمعة، ١٢ جمادى الأولى ١٤٤٨ هـ', cairo0.t);
+
+  // Ramadan: month 9 decides the Isha delay, the iftar mode, the occasion card and the fasting suggestion
+  const rama = async (hash, now) => {
+    const { p, ctx, errors } = await open('tv.html', 'city=الرياض&lat=24.7136&lon=46.6753&tz=Asia%2FRiyadh&' + hash, { now: new Date(now) });
+    const r = await p.evaluate(() => {
+      const t = computePrayers(), [mh, mm] = t.Maghrib.split(':').map(Number), [ih, im] = t.Isha.split(':').map(Number);
+      const oc = occasionNow(), f = fastingNext(new Date());
+      return { month: hijriMonthNow(), gap: (ih * 60 + im) - (mh * 60 + mm), oc: oc && { name: oc.o.name, today: !!oc.today, days: oc.days }, fast: f && { key: f.key, days: f.days } };
+    });
+    await ctx.close();
+    return { ...r, errors };
+  };
+  const E = '2027-02-07T09:00:00Z', F = '2027-03-09T09:00:00Z';   // 30 Shaaban 1448, and 1 Shawwal 1448 (Riyadh)
+  const a0 = await rama('', E), a1 = await rama('hijri=1', E), a2 = await rama('hijri=-1', E);
+  check('before Ramadan, no setting: month 8, Isha 90 minutes after Maghrib, Ramadan only tomorrow', a0.month === 8 && a0.gap === 90 && !a0.oc.today && a0.fast.days === 1 && !a0.errors.length, JSON.stringify(a0));
+  check('hijri=1 on 30 Shaaban: Ramadan has begun (month 9, Isha +120, the occasion and the fasting day are Ramadan)',
+    a1.month === 9 && a1.gap === 120 && a1.oc.name === 'رمضان' && a1.oc.today && a1.fast.key === 'ramadan' && a1.fast.days === 0, JSON.stringify(a1));
+  check('hijri=-1 on 30 Shaaban: still Shaaban, Isha 90', a2.month === 8 && a2.gap === 90, JSON.stringify(a2));
+  const b0 = await rama('', F), b1 = await rama('hijri=-1', F);
+  check('1 Shawwal, no setting: the Ramadan Isha is over (90)', b0.month === 10 && b0.gap === 90, JSON.stringify(b0));
+  check('hijri=-1 on 1 Shawwal: Ramadan still goes (month 9, Isha +120)', b1.month === 9 && b1.gap === 120 && b1.oc.name === 'رمضان' && b1.oc.today, JSON.stringify(b1));
+  // the occasion that follows the year: one day earlier with +1, the same one
+  const c0 = await rama('', NOW), c1 = await rama('hijri=1', NOW), c2 = await rama('hijri=-2', NOW);
+  check('occasion countdown: hijri=1 is one day less, hijri=-2 two days more, the same occasion',
+    c0.oc.name === c1.oc.name && c0.oc.name === c2.oc.name && c0.oc.days - c1.oc.days === 1 && c2.oc.days - c0.oc.days === 2, JSON.stringify([c0.oc, c1.oc, c2.oc]));
+}
+
 await browser.close();
 console.log(failed ? `\n${failed} failed` : '\nall page tests passed');
 process.exit(failed ? 1 : 0);
