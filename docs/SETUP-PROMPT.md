@@ -356,6 +356,7 @@ optimize/saver.sh national <auto or off>          # ONLY if I asked to turn off 
 optimize/saver.sh prayeradj <fajr +2 maghrib -1 …, then on>   # ONLY if I said my mosque's adhan is minutes early or late (default off: leave it); off goes back to the calculated times
 optimize/music.sh adhan fajr-voice <1-21>          # ONLY if I asked for another muezzin at Fajr (default 10, «فجر الحرم المكي»: leave it); adhan voice <n> is for the other four prayers (never 10, 13, 17, 20)
 optimize/music.sh adhan short <on or off>        # ONLY if I asked for a short adhan, stopping after its first minute (default off: leave it)
+optimize/music.sh adhan stopkey <on or off>      # ONLY if I asked that any key stops the adhan (default off: leave it; OK on the adhan bar stops it anyway)
 optimize/saver.sh digits <hindi or latin>        # ONLY if I asked for 123 instead of ١٢٣ (default hindi: leave it)
 optimize/saver.sh markets <up to 4 of tasi, aramco, spx, btc, gold, silver, xrp, comma-separated>   # ONLY if I asked for other markets at the top left (default tasi,spx,btc: leave it)
 optimize/saver.sh markets off                    # ONLY if I asked to hide the markets line at the top and keep just the weather (`markets on` brings it back)

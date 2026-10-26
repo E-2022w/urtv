@@ -22,6 +22,8 @@ python3 tests/tweaks_trim_test.py
 python3 tests/key_home_test.py
 python3 tests/dock_names_test.py
 python3 tests/dock_sleep_test.py
+python3 tests/dock_settings_key_test.py
+python3 tests/settings_key_test.py
 python3 tests/find_tv_test.py
 python3 tests/wireless_test.py
 python3 tests/precheck_test.py
@@ -56,6 +58,7 @@ python3 tests/music_adhan_own_test.py
 python3 tests/own_adhan_test.py
 python3 tests/own_adhan_keep_test.py
 python3 tests/player_logic_test.py
+python3 tests/seek_burst_test.py
 python3 tests/pill_text_test.py
 python3 tests/tasks_card_test.py
 python3 tests/now_playing_test.py
@@ -67,6 +70,7 @@ python3 tests/glow_look_test.py
 python3 tests/unsplash_header_test.py
 python3 tests/bounded_test.py
 python3 tests/adhan_bar_test.py
+python3 tests/adhan_keys_test.py
 python3 tests/clock_zone_test.py
 python3 tests/countdown_text_test.py
 node tests/page.test.mjs

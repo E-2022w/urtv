@@ -143,6 +143,8 @@ optimize/music.sh adhan off | on
 optimize/music.sh adhan voice 7            # the recording used at Dhuhr, Asr, Maghrib and Isha (not the Fajr ones: 10 13 17 20)
 optimize/music.sh adhan fajr-voice 10      # «مؤذن الفجر»: Fajr's own muezzin (default 10)
 optimize/music.sh adhan short on|off       # «أذان مختصر»: stops after the first minute, 3-second fade
+optimize/music.sh adhan stopkey on|off     # «إيقاف الأذان بأي زر»: any key stops the adhan (once); off: OK on the adhan bar stops it
+optimize/music.sh adhan stop               # stop the adhan that is playing
 optimize/music.sh adhan volume 60          # its own volume, 10-100
 optimize/music.sh adhan add my-adhan.mp3   # the person's own recording (ffmpeg here makes it small); `adhan voice own`, `adhan own-clear`
 ```

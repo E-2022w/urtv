@@ -1,0 +1,35 @@
+# key: kind, keyCode, action (0 down, 1 up), repeat, playing, barShowing, barFocused, stopAny, expected, note
+# bar: kind, prayer (PrayerTimes number), friday, stopAny, expected, note
+reset								-	OK on the focused bar
+key	23	0	0	1	1	1	0	STOP	OK on the focused bar stops the adhan
+key	23	0	1	1	1	1	0	EAT	a held OK is consumed, not repeated into the app
+key	23	1	0	0	1	1	0	EAT	the release of that press is consumed, even if the adhan is already over (no click on the focused app)
+key	23	0	0	0	1	1	0	PASS	OK again with no adhan playing is an ordinary OK
+reset								-	OK elsewhere
+key	23	0	0	1	1	0	0	PASS	OK on an app tile (bar not focused) opens the app as always
+key	23	0	0	1	0	1	0	PASS	the bar is hidden («تنبيه قبل الأذان» off): OK is ordinary
+key	21	0	0	1	1	1	0	PASS	a direction key with the setting off goes on
+key	4	0	0	1	1	1	0	PASS	Back with the setting off goes on
+reset								-	stop on any key
+key	21	0	0	1	0	0	1	STOP	any key stops the adhan (setting on), bar or no bar
+key	21	1	0	1	0	0	1	EAT	its release is consumed
+key	21	0	0	0	0	0	1	PASS	the next press, adhan over, is an ordinary key
+reset								-	reserved keys
+key	24	0	0	1	1	1	1	PASS	volume up is never taken, even with «any key» on
+key	25	0	0	1	1	1	1	PASS	volume down is never taken, even with «any key» on
+key	164	0	0	1	1	1	1	PASS	mute is never taken, even with «any key» on
+key	3	0	0	1	1	1	1	PASS	Home is never taken, even with «any key» on
+key	26	0	0	1	1	1	1	PASS	Power is never taken, even with «any key» on
+key	176	0	0	1	1	1	1	PASS	settings is never taken, even with «any key» on
+reset								-	one press, one stop
+key	66	0	0	1	0	0	1	STOP	Enter stops with «any key»
+key	66	1	0	1	0	0	1	EAT	the release is consumed
+key	22	0	0	0	0	0	1	PASS	tomorrow's adhan: nothing was turned off; with no adhan playing keys are ordinary
+bar	4	0	0	أذان المغرب  ·  اختيار: إيقاف الأذان	Maghrib, OK stops
+bar	0	0	0	أذان الفجر  ·  اختيار: إيقاف الأذان	Fajr
+bar	2	1	0	أذان الجمعة  ·  اختيار: إيقاف الأذان	a Friday's Dhuhr
+bar	2	0	0	أذان الظهر  ·  اختيار: إيقاف الأذان	Dhuhr
+bar	3	0	0	أذان العصر  ·  اختيار: إيقاف الأذان	Asr
+bar	5	0	1	أذان العشاء  ·  أي زر: إيقاف الأذان	Isha, «any key» on
+bar	-1	0	0	الأذان  ·  اختيار: إيقاف الأذان	from the computer: no prayer named
+bar	1	0	0	الأذان  ·  اختيار: إيقاف الأذان	sunrise has no adhan

@@ -119,7 +119,10 @@ public class MainActivity extends Activity {
     private HomeCard homeCard;
     private NowCard nowCard;   // «يُتلى الآن»: at the right end of the pills row while a surah or a station is on
     private Pill sleepPill;   // «مؤقت النوم», with the minutes left while it runs (shown while it has the focus)
-    private TextView adhanBar;   // «أذان المغرب بعد ٨ دقائق», over the top edge
+    private TextView adhanBar;   // «أذان المغرب بعد ٨ دقائق», over the top edge; while the adhan plays «أذان المغرب · اختيار: إيقاف الأذان»
+    private final AdhanKeys adhanKeys = new AdhanKeys();
+    private boolean adhanBarHeld;       // the bar took the focus for the adhan that is playing
+    private View focusBeforeAdhan;      // and where it comes back to
     private View clockBlock, bottomBlock;   // the greeting, clock and date; the app title and the dock under it
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
@@ -131,7 +134,10 @@ public class MainActivity extends Activity {
     };
     // «تلاوة» started, paused, changed or stopped a surah or a station (MusicService says so; nothing polls): the «يُتلى الآن» card follows
     private final BroadcastReceiver nowPlayingChanged = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { updateNowPlaying(); }
+        @Override public void onReceive(Context c, Intent i) {
+            updateNowPlaying();
+            updateAdhanBar(ConfigSnapshot.read(MainActivity.this));   // the adhan began or ended: the bar names it, or goes
+        }
     };
     // the sleep timer started, ended or was cancelled (here, or from the computer): the pill follows at once
     private final BroadcastReceiver sleepChanged = new BroadcastReceiver() {
@@ -285,6 +291,11 @@ public class MainActivity extends Activity {
         adhanBar.setGravity(Gravity.CENTER);
         adhanBar.setMaxLines(1);   // «إقامة العشاء بعد ١٣ دقيقة» is the longest: one line, even at 960×540
         adhanBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0x00DCB86F, 0x57DCB86F, 0x57DCB86F, 0x00DCB86F}));
+        adhanBar.setOnFocusChangeListener((v, focused) -> {   // the bar is focusable only while the adhan plays: it lights up when OK would stop it
+            v.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                    focused ? new int[]{0x00DCB86F, 0xB3DCB86F, 0xB3DCB86F, 0x00DCB86F} : new int[]{0x00DCB86F, 0x57DCB86F, 0x57DCB86F, 0x00DCB86F}));
+            ((TextView) v).setTextColor(focused ? 0xFFFFFFFF : 0xFFFFE9B8);
+        });
         adhanBar.setVisibility(View.GONE);
         root.addView(adhanBar, new FrameLayout.LayoutParams(-1, dp(26), Gravity.TOP));
 
@@ -1002,6 +1013,23 @@ public class MainActivity extends Activity {
         String words = AdhanBar.text(this, cfg);
         adhanBar.setVisibility(words == null ? View.GONE : View.VISIBLE);
         if (words != null) adhanBar.setText(words);
+        // while the adhan plays the bar takes the focus, so that OK on it stops the adhan (AdhanKeys); the focus goes back after
+        boolean live = words != null && AdhanBar.playing(cfg);
+        adhanBar.setFocusable(live);
+        if (live && !adhanBarHeld && hasWindowFocus()) {   // not over a dialog or a popup
+            adhanBarHeld = true;
+            View was = getCurrentFocus();
+            focusBeforeAdhan = was == adhanBar ? null : was;
+            adhanBar.requestFocus();
+        } else if (!live && adhanBarHeld) {
+            adhanBarHeld = false;
+            View back = focusBeforeAdhan;
+            focusBeforeAdhan = null;
+            if (adhanBar.hasFocus()) {
+                if (back != null && back.isShown()) back.requestFocus();
+                else if (!pills.isEmpty()) pills.get(0).requestFocus();
+            }
+        }
     }
 
     private static String arabicDigits(String s) { return Digits.of(s); }   // the setting's digits (hindi or latin)
@@ -1463,6 +1491,12 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
+        // while the adhan plays: OK on its bar stops it, and with «إيقاف الأذان بأي زر» any key does; that press is consumed whole
+        boolean adhan = NowPlaying.adhanLive();
+        int stop = adhanKeys.decide(e.getKeyCode(), e.getAction(), e.getRepeatCount(), adhan, adhanBar.getVisibility() == View.VISIBLE,
+                getCurrentFocus() == adhanBar, adhan && NowPlaying.adhanStopKey(this));
+        if (stop == AdhanKeys.STOP) NowPlaying.stopAdhan(this);
+        if (stop != AdhanKeys.PASS) return true;
         // Menu key on the remote opens the Inputs dropdown.
         if (e.getKeyCode() == KeyEvent.KEYCODE_MENU && e.getAction() == KeyEvent.ACTION_UP && !pills.isEmpty()) {
             showInputs(pills.get(0));

@@ -2477,6 +2477,38 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   await e.ctx.close();
 }
 
+// while the adhan plays in the launcher (window.UrtvNative.adhan(), mocked here): «أذان المغرب · اختيار: إيقاف الأذان», and gone again after
+{
+  const live = (o) => `window.UrtvNative = { adhan: () => ${o ? JSON.stringify(JSON.stringify(o)) : "''"} };`;
+  const { p, ctx, errors } = await open('tv.html', 'panel=prayers', { now: '2026-10-22T10:00:00Z' });   // Thursday; far from a prayer
+  const bar = () => p.evaluate(() => { const b = document.getElementById('adbar'); return { hidden: b.hidden, text: b.textContent }; });
+  const ask = async (o, force = true) => { await p.evaluate(live(o) + ' adhanLiveTick(' + force + ');'); return bar(); };
+  let r = await ask({ live: true, prayer: 4, any: false });
+  check('adhan playing: the bar says «أذان المغرب  ·  اختيار: إيقاف الأذان»', !r.hidden && r.text === 'أذان المغرب  ·  اختيار: إيقاف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: 0, any: true });
+  check('adhan playing with «إيقاف الأذان بأي زر» on: «أي زر: إيقاف الأذان»', r.text === 'أذان الفجر  ·  أي زر: إيقاف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: -1, any: false });
+  check('adhan from the computer (no prayer named): «الأذان  ·  اختيار: إيقاف الأذان»', r.text === 'الأذان  ·  اختيار: إيقاف الأذان', JSON.stringify(r));
+  r = await ask(null);
+  check('adhan over: the bar goes', r.hidden, JSON.stringify(r));
+  await p.evaluate(live({ live: true, prayer: 2, any: false }) + ' adhanLiveTick(true);');
+  r = await p.evaluate(() => { const was = isFriday; window.isFriday = () => true; ADHAN_LIVE = { prayer: 2, any: false }; tickAdhanBar(); const t = document.getElementById('adbar').textContent; window.isFriday = was; return t; });
+  check('a Friday\'s Dhuhr: «أذان الجمعة»', r === 'أذان الجمعة  ·  اختيار: إيقاف الأذان', r);
+  await p.evaluate(() => { window.UrtvNative = { adhan: () => { throw new Error('boom'); } }; adhanLiveTick(true); });
+  check('adhan: a failing native call is harmless (the bar goes, no errors)', !errors.length && (await bar()).hidden, errors.join('; '));
+  await p.evaluate(() => { window.UrtvNative = undefined; ADHAN_LIVE = null; adhanLiveTick(true); });
+  check('adhan: nothing without the app (no UrtvNative)', !errors.length && (await bar()).hidden);
+  await ctx.close();
+  const off = await open('tv.html', 'panel=prayers&adhanbar=0', { now: '2026-10-22T10:00:00Z' });
+  await off.p.evaluate(live({ live: true, prayer: 4, any: false }) + ' adhanLiveTick(true);');
+  check('adhan playing, «تنبيه قبل الأذان» off: no bar (OK then is an ordinary key)', !off.errors.length && (await off.p.evaluate(() => document.getElementById('adbar').hidden)));
+  await off.ctx.close();
+  const w = await open('tv.html', 'panel=prayers&widget=1', { width: 461, height: 250, now: '2026-10-22T10:00:00Z' });
+  await w.p.evaluate(live({ live: true, prayer: 4, any: false }) + ' adhanLiveTick(true);');
+  check('adhan playing: not in the launcher\'s card page (the home screen has its own bar)', !w.errors.length && (await w.p.evaluate(() => document.getElementById('adbar').hidden)));
+  await w.ctx.close();
+}
+
 // ---- «يومك» (today): the next prayer, the next game of a followed team, the first open task, the next occasion; a line with
 // nothing to say is left out. Beside the clock at three sizes, and in a home slot.
 const TODAY_SEED = (o = {}) => `
