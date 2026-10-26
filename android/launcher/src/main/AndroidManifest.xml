@@ -49,6 +49,12 @@
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
+        <!-- the settings key (SleepService, optimize/dock.sh settings-key): the TV's settings app and the system settings screen must be visible
+             on Android 11+, or the pre-check finds neither and the key silently does nothing -->
+        <intent>
+            <action android:name="android.settings.SETTINGS" />
+        </intent>
+        <package android:name="com.android.tv.settings" />
         <package android:name="com.tcl.tv" />
         <package android:name="com.tcl.suspension" />
         <package android:name="sa.urtv.screensaver" />
