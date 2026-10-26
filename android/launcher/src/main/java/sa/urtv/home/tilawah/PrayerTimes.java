@@ -150,14 +150,9 @@ final class PrayerTimes {
         return Ui.arabic(n) + (n >= 3 && n <= 10 ? " دقائق" : " دقيقة");
     }
 
-    /** ٠٥:١٢ → "٥:١٢ ص", ١٨:٤٠ → "٦:٤٠ م" */
-    static String clock12(String hhmm) {
-        int colon = hhmm.indexOf(':');
-        int h = Integer.parseInt(hhmm.substring(0, colon));
-        String m = hhmm.substring(colon + 1);
-        String suffix = h < 12 ? "ص" : "م";
-        int h12 = h % 12 == 0 ? 12 : h % 12;
-        return Ui.digits(h12 + ":" + m) + " " + suffix;
+    /** "05:12" → "٥:١٢ ص", "18:40" → "٦:٤٠ م"; with the screensaver's «ساعة ٢٤» on: "٠٥:١٢", "١٨:٤٠" (ClockText) */
+    static String clockText(String hhmm) {
+        return sa.urtv.home.ClockText.time(hhmm, sa.urtv.home.Digits.clock24(), sa.urtv.home.Digits.latin());
     }
 
     // ---------------------------------------------------------------- Aladhan

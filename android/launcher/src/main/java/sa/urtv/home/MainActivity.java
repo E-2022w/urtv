@@ -978,9 +978,10 @@ public class MainActivity extends Activity {
         Calendar now = ClockZone.at(ms, tz);   // the city's time, like the prayer times beside it
         int h = now.get(Calendar.HOUR_OF_DAY);
         greetingLine.update(h, cfg);
-        int hh = h % 12 == 0 ? 12 : h % 12;   // always 12-hour
-        clock.setText(arabicDigits(hh + ":" + String.format(Locale.ROOT, "%02d", now.get(Calendar.MINUTE))));
-        ampm.setText(h < 12 ? "ص" : "م");
+        boolean h24 = cfg.clock24();   // «ساعة ٢٤»: off (12-hour with the ص or م) unless the owner turned it on
+        clock.setText(ClockText.face(h, now.get(Calendar.MINUTE), h24, Digits.latin()));
+        ampm.setText(ClockText.suffix(h, h24));
+        ampm.setVisibility(h24 ? View.GONE : View.VISIBLE);
         boolean other = zone != null && ClockZone.differs(tvTz, tz, ms);
         zoneLine.setVisibility(other ? View.VISIBLE : View.GONE);
         if (other) zoneLine.setText(ClockZone.label(zone[0]));
