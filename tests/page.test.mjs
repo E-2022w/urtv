@@ -3291,14 +3291,16 @@ const oneLine = p => p.evaluate(() => [...(((CARDS.find(c => c.eff === 'matches'
   const cen = e => { const b = bx(e); return (b.left + b.right) / 2; };
   const mk = tm => ({ nm: tm.querySelector('.nm'), cr: tm.querySelector('img.cr') });
   const h = mk(tms[0]), a = mk(tms[1]);
+  // the crests on screen: a row that dropped its crests (.nocr, to keep its full names) has them in the DOM but not shown
+  const on = e => e && getComputedStyle(e).display !== 'none' ? e : null, hc = on(h.cr), ac = on(a.cr);
   const mids = kids.map(k => { const b = bx(k); return (b.top + b.bottom) / 2; });
   return {
     text: li.textContent.replace(/\s+/g, ' ').trim(), cut: rowCut(row), dots: li.innerText.includes('…'),
     oneLine: Math.max(...mids) - Math.min(...mids) < r.height * .5 && li.getBoundingClientRect().height < 3 * parseFloat(getComputedStyle(row).fontSize),
     inside: kids.every(k => { const b = bx(k); return !b.width || (b.left >= r.left - .5 && b.right <= r.right + .5); }),
     // right to left: the home club, its crest, the score, the guest's crest, the guest club (a missing crest leaves its name next to the score)
-    order: [h.nm, h.cr, mid, a.cr, a.nm].filter(Boolean).map(cen).every((x, k, all) => !k || x < all[k - 1]),
-    gapHome: h.cr ? Math.abs(bx(h.cr).right - bx(h.nm).left) : 0, gapAway: a.cr ? Math.abs(bx(a.nm).right - bx(a.cr).left) : 0,
+    order: [h.nm, hc, mid, ac, a.nm].filter(Boolean).map(cen).every((x, k, all) => !k || x < all[k - 1]),
+    gapHome: hc ? Math.abs(bx(hc).right - bx(h.nm).left) : 0, gapAway: ac ? Math.abs(bx(a.nm).right - bx(ac).left) : 0,
     crests: [h.cr, a.cr].filter(Boolean).length, shown: [h.cr, a.cr].filter(e => e && getComputedStyle(e).display !== 'none').length, domHome: h.cr ? !!(h.nm.compareDocumentPosition(h.cr) & 4) : true, domAway: a.cr ? !!(a.cr.compareDocumentPosition(a.nm) & 4) : true,
     date: (row.querySelector('.mwhen') || {}).textContent || '', dt: row.querySelector('.dt').textContent.replace(/\s+/g, ' ').trim(), size: row.style.fontSize,
     font: parseFloat(getComputedStyle(row).fontSize),
@@ -3315,7 +3317,7 @@ for (const [cards, W, wide, label] of [['matches,prayerrow,hourly', 1920, 560, '
     check(`${tag}: ${games.length} games, each on one line inside the card, nothing cut, no «…»`,
       !o.errors.length && rows.length >= Math.min(2, games.length) && rows.length <= games.length && rows.every(r => r.oneLine && !r.cut && !r.dots && r.inside), JSON.stringify(rows) + o.errors.join('; '));
     check(`${tag}: the crests sit next to the score, close to the names: club, crest, score, crest, club`,
-      rows.every(r => r.order && r.domHome && r.domAway && r.gapHome < r.font * .7 && r.gapAway < r.font * .7) && rows.some(r => r.crests === 2), JSON.stringify(rows));
+      rows.every(r => r.order && r.domHome && r.domAway && r.gapHome < r.font * .7 && r.gapAway < r.font * .7) && rows.some(r => r.shown === 2), JSON.stringify(rows));
     check(`${tag}: the date is on the line: a finished game says «انتهت» and the day, a game to come the day and time and «بعد …»`,
       rows.every(r => r.date && (r.dt === 'انتهت' ? /[٠-٩]+ \S+$/.test(r.date.trim()) : /^بعد [٠-٩]+ \S+$/.test(r.dt))), JSON.stringify(rows.map(r => [r.date, r.dt])));
     check(`${tag}: the games of a card share one size`, new Set(rows.map(r => r.size)).size === 1, JSON.stringify(rows.map(r => r.size)));
@@ -3336,12 +3338,23 @@ for (const width of [400, 330]) {   // a narrow box: the steps down the ladder, 
   await o.p.evaluate(put(MIXED) + ' renderPanel(false);'); await o.p.evaluate(() => loadCrests()); await o.p.waitForTimeout(300);
   await o.p.evaluate(() => { for (const c of CARDS) c.ul.__h = null; renderPanel(false, 'matches'); });
   const rows = await oneLine(o.p), r = await homeProbe(o.p);
+  // does the long row fit with its full names once its crests are gone (the full date, the full size)? Measured on the page's own fonts,
+  // so the rule is checked, not one font's widths: full names first, no crests before short names, short names only when that does not fit
+  const fullFits = await o.p.evaluate(() => {
+    const row = [...document.querySelectorAll('li.mg')][2].firstElementChild, save = row.innerHTML, cls = row.className, fs = row.style.fontSize;
+    row.querySelectorAll('[data-full]').forEach(e => { e.textContent = e.dataset.full; });
+    row.classList.add('nocr'); row.style.fontSize = '';
+    const ok = !rowCut(row);
+    row.innerHTML = save; row.className = cls; row.style.fontSize = fs;
+    return ok;
+  });
   check(`home matches alone, ${width} px wide: one line each, the short date or a smaller size, nothing cut or ending in «…»`,
     !o.errors.length && rows.length === 3 && rows.every(x => x.oneLine && !x.cut && !x.dots && x.inside) && !r.cut.length && !r.dots.length, JSON.stringify([rows, r]));
   // the long row loses its crests first and keeps the full names; only a card too narrow for that takes the short names
-  check(`home matches alone, ${width} px wide: the long row has no crests, ${width === 400 ? 'keeps its full names' : 'takes the short names'}, and every row still has its date`,
-    rows[2].shown === 0 && rows.every(x => x.date) && (width === 400 ? rows[2].text.includes('مانشستر يونايتد') : rows[2].text.includes('اليونايتد')),
-    JSON.stringify(rows.map(x => [x.text, x.date, x.size, x.shown])));
+  check(`home matches alone, ${width} px wide: the long row has no crests, ${fullFits ? 'keeps its full names (they fit without crests)' : 'takes the short names (the full ones do not fit even without crests)'}, and every row still has its date`,
+    rows[2].shown === 0 && rows.every(x => x.date) && (fullFits ? rows[2].text.includes('مانشستر يونايتد') : rows[2].text.includes('اليونايتد') && !rows[2].text.includes('مانشستر')),
+    JSON.stringify([fullFits, rows.map(x => [x.text, x.date, x.size, x.shown])]));
+  if (width === 330) check('home matches alone, 330 px wide: too narrow for the long row\'s full names even without crests', !fullFits);
   if (width === 400) check(`home matches alone, ${width} px wide: rows that fit with their crests keep them`, rows[0].shown === 2 && rows[1].shown === 1, JSON.stringify(rows.map(x => x.shown)));
   await o.ctx.close();
 }
