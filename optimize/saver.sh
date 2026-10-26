@@ -49,6 +49,11 @@
 #   optimize/saver.sh prayermethod jafari|auto     «طريقة الحساب»: auto (the default) = the city's country's own, jafari = Shia Ithna-Ashari (Leva, Qum)
 #   optimize/saver.sh prayeradj on|off             «تعديل وقت الصلاة» (off by default): each prayer moved by its own whole minutes, -20..20
 #   optimize/saver.sh prayeradj fajr +2 maghrib -1   the minutes of fajr dhuhr asr maghrib isha (the others stay); sunrise is never moved
+#   optimize/saver.sh export > settings.json       the settings to move to a second TV (city, prayer method, cards, markets, teams, adhan…;
+#                                                  never tasks, photos, the person's own adhan, Wi-Fi or keys): one JSON file, {"schema":1,…}
+#   optimize/saver.sh import settings.json         what it would change on this TV (old → new), nothing is sent; add --yes to apply it: all or
+#                                                  nothing, and the settings from before are saved in optimize/run/settings-before-import.json
+#                                                  (`import optimize/run/settings-before-import.json --yes` undoes it)
 #   optimize/saver.sh update                       download the latest screen now
 # Only ADB can change these (sa.urtv.screensaver/.SaverReceiver needs the shell's DUMP).
 set -euo pipefail
@@ -239,6 +244,7 @@ case "${1:-}" in
     # the home app's adhan alarm was set for the old minutes: set it again now (no launcher, no harm)
     [ "$rc" != 0 ] || "$PY" -I optimize/tv.py "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN_RESCHEDULE" > /dev/null 2>&1 || true
     exit "$rc" ;;
+  export|import) "$PY" -I optimize/settings_move.py "$@" ;;   # the logic is in Python: validated before anything is sent
   find-team) shift; "$PY" -I optimize/find-team.py "$@" ;;   # Arabic or English name
   *) sed -n '2,/^# Only ADB/p' "$0"; exit 1 ;;
 esac

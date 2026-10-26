@@ -39,6 +39,7 @@ python3 tests/market_prices_test.py
 python3 tests/adhkar_tool_test.py
 python3 tests/saver_tasks_test.py
 python3 tests/saver_quote_test.py
+python3 tests/settings_move_test.py
 python3 tests/saver_off_test.py
 python3 tests/versions_test.py
 python3 tests/channel_test.py
