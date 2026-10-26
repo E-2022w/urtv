@@ -8,6 +8,8 @@ python3 tests/tilawah_test.py
 python3 tests/prayer_math_test.py
 python3 tests/prayer_method_test.py
 python3 tests/prayer_adj_test.py
+python3 tests/hijri_offset_test.py
+python3 tests/saver_hijri_test.py
 python3 tests/upload_test.py
 python3 tests/install_extras_test.py
 python3 tests/share_test.py
