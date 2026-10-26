@@ -66,7 +66,7 @@ final class Parental {
 
     static void setAllowed(Context c, String pkg, boolean on) {
         toggle(c, "allowed", pkg, on);
-        changed(c);
+        if (prefs(c).getBoolean("kids", false)) changed(c);   // only kids mode shows by this list
     }
 
     static void setKids(Context c, boolean on) {
