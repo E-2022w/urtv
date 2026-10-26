@@ -256,6 +256,10 @@ final class Prefs {
     String minRating() { return sp.getString("minRating", "7"); }
     void setMinRating(String v) { sp.edit().putString("minRating", v).apply(); }
 
+    /** «ساعة ٢٤» (default off: the 12-hour clock as always); sent to the page as #clock=24, and only while on. */
+    boolean clock24() { return sp.getBoolean("clock24", false); }
+    void setClock24(boolean v) { sp.edit().putBoolean("clock24", v).apply(); }
+
     String digits() { return sp.getString("digits", "hindi"); }
     void setDigits(String v) { sp.edit().putString("digits", v).apply(); }
 
@@ -402,6 +406,7 @@ final class Prefs {
             + "&minrating=" + minRating()
             + "&photos=" + photoMinutes()
             + "&digits=" + digits()
+            + ClockSetting.fragment(clock24())
             + "&cardstyle=" + cardStyle()
             + "&adhanbar=" + (adhanBar() ? "1" : "0")
             + "&yearstrip=" + (yearStrip() ? "1" : "0")

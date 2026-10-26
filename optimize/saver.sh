@@ -30,6 +30,7 @@
 #   optimize/saver.sh cardstyle glass1             look of the card beside the clock: current dark1 glass1 dark3 glass3
 #   optimize/saver.sh national off                 the quiet green look on National Day (21-25 Sep) and Founding Day (20-24 Feb): auto (default) or off
 #   optimize/saver.sh digits latin                 numbers: hindi = ١٢٣ (default), latin = 123
+#   optimize/saver.sh clock24 on                   every time of day as 24-hour (١٩:٣٠) instead of 12-hour (٧:٣٠ م): on | off (default off)
 #   optimize/saver.sh markets tasi,gold,btc        top left, up to 4 in order: tasi aramco spx btc gold silver xrp (default tasi,spx,btc)
 #   optimize/saver.sh markets off                  hide the markets line at the top (only the weather stays; the list is kept and nothing is fetched for it); `markets on` brings it back
 #   optimize/saver.sh clocksize medium             the screensaver's clock: large (default) medium small
@@ -175,6 +176,7 @@ case "${1:-}" in
     send SET "$extra" ;;
   national) set1 national "${2:?usage: optimize/saver.sh national auto|off}" ;;
   digits)   set1 digits "${2:?usage: optimize/saver.sh digits latin}" ;;
+  clock24)  case "${2:-}" in on|off) set1 clock24 "$2" ;; *) echo "usage: optimize/saver.sh clock24 on|off"; exit 1 ;; esac ;;
   idle)
     # the app may change the TV's timer only if the owner allowed it; the shell always may
     v=$(quote "${2:?usage: optimize/saver.sh idle 10}") || exit 1
