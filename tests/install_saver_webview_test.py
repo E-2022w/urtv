@@ -39,7 +39,7 @@ def check(name, ok, detail=""):
 def run(webview_line):
     t = Path(tempfile.mkdtemp()); tree = t / "tree"; bin_ = t / "bin"
     (tree / "optimize" / "lists").mkdir(parents=True); bin_.mkdir()
-    for f in ("install.sh", "precheck.sh", "precheck.py"):
+    for f in ("install.sh", "home-journal.sh", "precheck.sh", "precheck.py"):
         shutil.copy(ROOT / "optimize" / f, tree / "optimize")
     for f, body in (("py", STUB_PY), ("curl", "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -o ] && : > \"$2\"; shift; done\n"), ("sleep", "#!/bin/sh\nexit 0\n")):
         (bin_ / f).write_text(body); (bin_ / f).chmod(0o755)

@@ -82,10 +82,14 @@ it is how the first TCL set got our home screen after the black screen.
 
 The safe way to switch, built into `optimize/install.sh launcher`:
 1. Install the new home first.
-2. Start `optimize/deadman.sh` on the TV: unless `/data/local/tmp/home_ok` appears within 300 s it re-enables
-   the stock home and the setup app and presses Home.
+2. Write the journal (`optimize/run/home-switch.json`: the stock home, the setup app and who held Home before), then start
+   `optimize/deadman.sh` on the TV with a nonce of this switch: unless `/data/local/tmp/home_ok.<nonce>` appears within 300 s it
+   re-enables the stock home and the setup app and presses Home (a marker of an older switch does not count). It writes its pid
+   and a heartbeat every 10 s; if it is not alive, the switch is not made. A restart of the TV kills it (stock Android cannot
+   prevent that): the next `install.sh` or `run.sh` reads the journal and, if Home is not ours and the marker is not there,
+   puts the stock home back; `optimize/restore-home.sh` does it on demand (ADB needed).
 3. Disable the setup app, then the stock home (this order avoided the black screen).
-4. Press Home and check the new launcher is in front (3 tries); only then create `home_ok`, and confirm the safety
+4. Press Home and check the new launcher is in front (3 tries); only then create `home_ok.<nonce>`, and confirm the safety
    switch hadn't already fired.
 
 ## TCL quirks

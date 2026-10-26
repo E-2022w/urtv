@@ -241,6 +241,10 @@ the windows (morning: Fajr to Dhuhr, evening: Asr to Maghrib).
 **The Android apps** check this repo for a new screen page when the screensaver starts, at most every 6 hours (so it must stay public), start fast
 (the page shows once the clock, saved panels and photo are ready), and come back after a power cut.
 
+## More
+
+[SECURITY.md](SECURITY.md) (report a vulnerability) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md)
+
 ## Credits
 
 Photos: Unsplash photographers, listed in [docs/PHOTO-CREDITS.md](docs/PHOTO-CREDITS.md). Fonts: Thmanyah, and
