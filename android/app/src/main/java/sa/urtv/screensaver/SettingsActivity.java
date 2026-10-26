@@ -525,14 +525,17 @@ public class SettingsActivity extends Activity {
         final boolean home = place >= 0;
         String current = home ? prefs.homePanelAt(place) : prefs.panel();
         // the home places can also be left empty; «لا شيء» is that choice there, so it is «بدون» in the list
-        String[] labels = new String[Prefs.PANELS.length];
+        // a home-only card («الصلاة القادمة») is not offered beside the screensaver's clock: its panel there says the same
+        List<String[]> rows = new ArrayList<>();
+        for (String[] p : Prefs.PANELS) if (home || !Prefs.homeOnly(p[0])) rows.add(p);
+        String[] labels = new String[rows.size()];
         int sel = 0;
         for (int i = 0; i < labels.length; i++) {
-            labels[i] = home && "none".equals(Prefs.PANELS[i][0]) ? "بدون" : Prefs.PANELS[i][1];
-            if (Prefs.PANELS[i][0].equals(current)) sel = i;
+            labels[i] = home && "none".equals(rows.get(i)[0]) ? "بدون" : rows.get(i)[1];
+            if (rows.get(i)[0].equals(current)) sel = i;
         }
         String[] values = new String[labels.length], about = new String[labels.length];
-        for (int i = 0; i < labels.length; i++) { values[i] = Prefs.PANELS[i][0]; about[i] = Prefs.about(Prefs.PANEL_ABOUT, values[i]); }
+        for (int i = 0; i < labels.length; i++) { values[i] = rows.get(i)[0]; about[i] = Prefs.about(Prefs.PANEL_ABOUT, values[i]); }
         pickWithPreview(home ? HOME_CARD_NAMES[place] : "بجانب الساعة", values, labels, about, sel,
             v -> prefs.previewUrl(this, v, prefs.cardStyle()),
             v -> { if (home) prefs.setHomePanelAt(place, v); else prefs.setPanel(v); });

@@ -1593,6 +1593,13 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   }
 }
 
+// ---- «الصلاة القادمة» is the home screen's only: on the screensaver its bottom-right panel says the same, so panel=nextprayer is the verse there
+{
+  const { p, ctx, errors } = await open('tv.html', 'panel=nextprayer', { width: 1920, height: 1080 });
+  const r = await p.evaluate(() => ({ kinds: CARDS.map(c => c.kind).join(), np: !!document.querySelector('#week-list li.np') }));
+  check('screensaver panel=nextprayer: the verse instead, no second «الصلاة القادمة», no script errors', !errors.length && r.kinds === 'verse' && !r.np, JSON.stringify(r) + errors.join('; '));
+  await ctx.close();
+}
 // ---- «الصلاة القادمة»: one line, «المغرب ٥:٤٥ م، بعد ١ ساعة و ٥ دقائق» (the panel's and the bar's words), the name lit; every style, three sizes, both digit systems
 {
   const TIMES = "buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'19:15'});";
@@ -1601,7 +1608,7 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
       ['2026-10-23T07:00:00Z', 'الجمعة١١:٤٠ ص،بعد ١ ساعة و ٤٠ دقيقة', 'Friday morning: الجمعة'],
       ['2026-10-22T14:40:00Z', 'المغرب٥:٤٥ م،بعد ٥ دقائق', 'five minutes before Maghrib'],
       ['2026-10-22T17:10:00Z', 'الفجر٤:٥٠ ص،بعد ٨ ساعات و ٤٠ دقيقة', 'after Isha: tomorrow\'s Fajr']]) {
-    for (const [hash, width, height] of [['panel=nextprayer', 1920, 1080], ['panel=nextprayer', 1280, 720], ['panel=nextprayer', 960, 540], ['panel=nextprayer&widget=1', 461, 250]]) {
+    for (const [hash, width, height] of [['home_panel=nextprayer&widget=1', 461, 250], ['panel=nextprayer&widget=1', 436, 300]]) {   // the home card alone; the settings' preview
       for (const style of label === 'Thursday 16:40' ? ['current', 'dark1', 'glass1', 'dark3', 'glass3'] : ['current']) {
         for (const digits of label === 'Thursday 16:40' ? ['hindi', 'latin'] : ['hindi']) {
           const { p, ctx, errors } = await open('tv.html', `${hash}&cardstyle=${style}&digits=${digits}`, { width, height });
@@ -1615,7 +1622,7 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
               inside: parts.every(x => { const b = x.getBoundingClientRect(); return b.left >= card.left - 1 && b.right <= card.right + 1 && b.bottom <= card.bottom + 1; }),
               h: Math.round(np ? np.getBoundingClientRect().height : 0), font: np ? parseFloat(getComputedStyle(np).fontSize) : 0 };
           });
-          if (!hash.includes('widget')) {   // the screensaver's own «الصلاة القادمة» panel says the same time left in the same words
+          {   // the screensaver's «الصلاة القادمة» panel (in the page, hidden on the card) says the same time left in the same words
             const panel = await p.evaluate(() => { tickPrayer(); return document.getElementById('prayer-count')?.textContent || ''; });
             check(`next prayer ${label} ${width}x${height} ${style} ${digits}: the card's time left is the panel's, word for word`, r.text.endsWith(panel.replace(/^.*?(بعد )/, '$1')) && /بعد/.test(panel), panel + ' | ' + r.text);
           }

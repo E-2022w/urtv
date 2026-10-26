@@ -198,8 +198,14 @@ final class Prefs {
         {"none", "لا شيء"},
     };
 
-    /** Older builds had an on/off switch for the card; off becomes "none", otherwise the verse card. */
-    String panel() { return sp.getString("panel", sp.getBoolean("showWeek", true) ? "verse" : "none"); }
+    /** Cards for the home screen only: on the screensaver the always-on panel at the bottom right already says the same. */
+    static boolean homeOnly(String v) { return "nextprayer".equals(v); }
+
+    /** Older builds had an on/off switch for the card; off becomes "none", otherwise the verse card. A home-only card is the verse there. */
+    String panel() {
+        String v = sp.getString("panel", sp.getBoolean("showWeek", true) ? "verse" : "none");
+        return homeOnly(v) ? "verse" : v;
+    }
     void setPanel(String v) { sp.edit().putString("panel", v).apply(); }
 
     // One plain line about each card, in the words of docs/FEATURES.md (tests/check.py compares them): the pickers show it under the name

@@ -156,6 +156,7 @@ public class SaverReceiver extends BroadcastReceiver {
             if (teams.size() > Prefs.MAX_TEAMS) return "error: at most " + Prefs.MAX_TEAMS + " teams";
         }
         String panel = i.getStringExtra("panel"), home = i.getStringExtra("home_panel");
+        if (panel != null && Prefs.homeOnly(panel)) return "error: " + panel + " is a home-screen card only (the screensaver's panel already shows it): optimize/saver.sh home-card " + panel;
         if (panel != null && !isPanel(panel)) return "error: panel is one of " + panels();
         List<String> homeCards = null;
         if (home != null) {

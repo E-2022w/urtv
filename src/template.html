@@ -629,7 +629,8 @@ const CONFIG = {
   events: _list('events').filter(k => ['f1','ufc','boxing'].includes(k)),
   eventWindowDays: 14,
   // the card beside the clock: one of CARD_KINDS or none (#week=0 from older builds = none)
-  panel: (p => CARD_KINDS.includes(p) || p === 'none' ? p : 'verse')
+  // nextprayer is the launcher's only (the screensaver's bottom-right panel says the same): on the screensaver it is the verse
+  panel: (p => (CARD_KINDS.includes(p) && !(p === 'nextprayer' && _Q.get('widget') !== '1')) || p === 'none' ? p : 'verse')
          (_Q.get('panel') || (_Q.get('week') === '0' ? 'none' : 'verse')),
   // #tasks=: the open tasks, one per line (the app drops done ones), at most 12 of 60 characters
   tasks: (_Q.get('tasks') || '').split('\n').map(x=>x.trim().slice(0, 60)).filter(Boolean).slice(0, 12),
