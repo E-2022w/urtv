@@ -247,8 +247,8 @@ public class SettingsActivity extends Activity {
             }).show();
     }
 
-    // any place in Saudi Arabia or the other Gulf states, from Open-Meteo's GeoNames search (it takes one country at a time, so the
-    // hundred best matches of the world are asked for and the Gulf ones kept)
+    // any place in Saudi Arabia, the other Gulf states, Egypt, the Levant and North Africa (PrayerMethod.SEARCH_COUNTRIES), from
+    // Open-Meteo's GeoNames search (it takes one country at a time, so the hundred best matches of the world are asked for and those countries' kept)
     private void searchCity() {
         ask("اسم المدينة أو القرية", q -> fetch("https://geocoding-api.open-meteo.com/v1/search?count=100&language=ar&name="
             + Uri.encode(q), json -> {

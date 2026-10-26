@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The prayer calculation's choice: the app's PrayerMethod (the settings row, the city search, #pm=) and the Gulf cities of Cities.java on a plain JVM,
+"""The prayer calculation's choice: the app's PrayerMethod (the settings row, the city search, #pm=) and the non-Saudi cities of Cities.java (the Gulf, Egypt, the Levant, North Africa) on a plain JVM,
 and the three places that turn a zone into a method (the app's labels, the launcher's PrayerMath.methodFor, the page's CONFIG.prayerMethod) kept
 equal. Needs javac; without it the JVM part is skipped.   Run: python3 tests/prayer_method_test.py"""
 import re

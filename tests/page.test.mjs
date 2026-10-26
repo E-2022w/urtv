@@ -2952,6 +2952,30 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
     await method('tz=Asia%2FMuscat'), await method('tz=Europe%2FOslo'), await method(''), await method('tz=Asia%2FKuwait&pm=jafari'), await method('pm=auto&tz=Asia%2FQatar')];
   check('prayer method: Riyadh 4, Kuwait 9, Qatar 10, Dubai 16, Bahrain 8, Muscat 8, Oslo 4, no zone 4, #pm=jafari 0 anywhere, #pm=auto the country\'s',
     got.join() === '4,9,10,16,8,8,4,4,0,10', got.join());
+  // Egypt, the Levant and North Africa: each zone its method (Aladhan's ids; Syria, Lebanon and Palestine the Egyptian, 5)
+  const zones = { 'Africa/Cairo': 5, 'Asia/Amman': 23, 'Asia/Damascus': 5, 'Asia/Beirut': 5, 'Asia/Gaza': 5, 'Asia/Hebron': 5, 'Africa/Casablanca': 21, 'Africa/Algiers': 19, 'Africa/Tunis': 18 };
+  const gotZ = [];
+  for (const z of Object.keys(zones)) gotZ.push(await method('tz=' + encodeURIComponent(z)));
+  check('prayer method: Cairo 5, Amman 23, Damascus, Beirut, Gaza and Hebron 5, Casablanca 21, Algiers 19, Tunis 18; #pm=jafari still 0',
+    gotZ.join() === Object.values(zones).join() && await method('tz=Africa%2FCairo&pm=jafari') === 0, gotZ.join());
+
+  // those countries' cities offline: the page's own formula against the independent reference (tests/prayer_gold_countries.tsv), one minute of slack
+  {
+    const ref = readFileSync(path.join(ROOT, 'tests/prayer_gold_countries.tsv'), 'utf8').split('\n').filter(l => l && !l.startsWith('#')).map(l => l.split('\t'));
+    const mins = t => t.split(' ').map(x => +x.slice(0, 2) * 60 + +x.slice(3));
+    const bad = [];
+    for (const tz of Object.keys(zones)) {
+      const { p, ctx, errors } = await open('tv.html', 'tz=' + encodeURIComponent(tz), { now: new Date('2026-10-23T09:00:00Z') });
+      for (const [name, date, lat, lon, z, want] of ref.filter(r => r[4] === tz)) {
+        await p.clock.setFixedTime(new Date(date + 'T09:00:00Z'));
+        const t = await p.evaluate(([la, lo]) => { CONFIG.latitude = +la; CONFIG.longitude = +lo; const r = computePrayers(); return [r.Fajr, r.Sunrise, r.Dhuhr, r.Asr, r.Maghrib, r.Isha].join(' '); }, [lat, lon]);
+        if (mins(t).some((m, i) => Math.abs(m - mins(want)[i]) > 1)) bad.push(`${name} ${date}: ${t} vs ${want}`);
+      }
+      if (errors.length) bad.push(errors.join('; '));
+      await ctx.close();
+    }
+    check('the page computes those countries\' cities within a minute of the independent reference', ref.length >= 40 && !bad.length, bad.slice(0, 4).join('; '));
+  }
 
   // a Saudi city keeps exactly the times it had (tests/prayer_gold.tsv is what the page computed before the Gulf methods)
   const gold = readFileSync(path.join(ROOT, 'tests/prayer_gold.tsv'), 'utf8').split('\n').filter(l => l && !l.startsWith('#')).map(l => l.split('\t'));
@@ -2980,7 +3004,7 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
   }
 
   // Aladhan is asked for the same method
-  for (const [label, hash, id] of [['Riyadh', 'tz=Asia%2FRiyadh', 4], ['Kuwait', 'tz=Asia%2FKuwait', 9], ['Dubai', 'tz=Asia%2FDubai', 16], ['Riyadh, Ja\'fari', 'tz=Asia%2FRiyadh&pm=jafari', 0]]) {
+  for (const [label, hash, id] of [['Riyadh', 'tz=Asia%2FRiyadh', 4], ['Kuwait', 'tz=Asia%2FKuwait', 9], ['Dubai', 'tz=Asia%2FDubai', 16], ['Cairo', 'tz=Africa%2FCairo', 5], ['Amman', 'tz=Asia%2FAmman', 23], ['Casablanca', 'tz=Africa%2FCasablanca', 21], ['Algiers', 'tz=Africa%2FAlgiers', 19], ['Tunis', 'tz=Africa%2FTunis', 18], ['Riyadh, Ja\'fari', 'tz=Asia%2FRiyadh&pm=jafari', 0]]) {
     const urls = [];
     const { p, ctx } = await open('tv.html', hash + '&panel=prayers', { now: new Date('2026-10-23T09:00:00Z'), net: r => { if (/aladhan/.test(r.request().url())) { urls.push(r.request().url()); r.abort(); return true; } return false; } });
     await p.evaluate(() => loadPrayers());

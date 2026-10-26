@@ -68,10 +68,11 @@ Those defaults, unless I change them:
 - if I pick the episodes card: all genres and languages.
 
 My city is checked later against `android/app/src/main/java/sa/urtv/screensaver/Cities.java`: Saudi Arabia and the main
-cities of Bahrain, Kuwait, Qatar, the UAE and Oman are in it, each with its country's time zone and its prayer
-calculation, so a Gulf city by name (`city الدوحة`) just works. If it isn't there, step 4 sets it with its coordinates
-and time zone (`city <name> <lat> <lon> <zone>`) without asking me again; the zone of a place in the Gulf picks that
-country's calculation (`Asia/Kuwait`, `Asia/Qatar`, `Asia/Dubai`, `Asia/Bahrain`, `Asia/Muscat`). If I ask for the Shia
+cities of Bahrain, Kuwait, Qatar, the UAE, Oman, Egypt, Jordan, Syria, Lebanon, Palestine, Morocco, Algeria and Tunisia are
+in it, each with its country's time zone and its prayer calculation, so a city by name (`city الدوحة`, `city القاهرة`) just works. If it isn't there, step 4 sets it with its coordinates
+and time zone (`city <name> <lat> <lon> <zone>`) without asking me again; the zone of a place in those countries picks
+that country's calculation (`Asia/Kuwait`, `Asia/Qatar`, `Asia/Dubai`, `Asia/Bahrain`, `Asia/Muscat`, `Africa/Cairo`, `Asia/Amman`,
+`Asia/Damascus`, `Asia/Beirut`, `Asia/Hebron` or `Asia/Gaza`, `Africa/Casablanca`, `Africa/Algiers`, `Africa/Tunis`), so give the right one. If I ask for the Shia
 Ja'fari times: `optimize/saver.sh prayermethod jafari`.
 
 ## 0. Can you reach my TV? (check this first, 1 minute)
@@ -337,7 +338,7 @@ itself) and tell me. Some TCL firmware keeps its own home: then `SKIP_LAUNCHER=1
 Every setting, and what to say when I ask for something else: `docs/SETTINGS.md`.
 
 ```
-optimize/saver.sh cities                          # find my city (Saudi Arabia and the Gulf), then: optimize/saver.sh city <name>   (not listed: city <name> <lat> <lon> <time zone, e.g. Asia/Riyadh or Asia/Kuwait; a place that is not in the list is refused without it>)
+optimize/saver.sh cities                          # find my city (Saudi Arabia, the Gulf, Egypt, the Levant, North Africa), then: optimize/saver.sh city <name>   (not listed: city <name> <lat> <lon> <time zone, e.g. Asia/Riyadh, Asia/Kuwait or Africa/Cairo; a place that is not in the list is refused without it>)
 optimize/saver.sh prayermethod jafari             # only if I asked for the Shia Ja'fari times (auto = my country's own, the default)
 optimize/saver.sh find-team <club as I wrote it>  # Arabic is fine (الهلال): one call per club, Saudi clubs first;
                                                   # then: optimize/saver.sh teams <id:Name> <id:Name> ...  (my order); «لا شي»: optimize/saver.sh teams none
