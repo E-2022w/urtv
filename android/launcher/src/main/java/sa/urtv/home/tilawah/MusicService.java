@@ -10,6 +10,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.MediaPlayer;
@@ -479,7 +481,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         foreground();
 
         player = new MediaPlayer();
-        player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        player.setAudioAttributes(MEDIA_ATTRS);   // minSdk 26; USAGE_MEDIA is STREAM_MUSIC, the stream the adhan's own volume (adhanVolumeUp) sets
         player.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK);
         player.setVolume(1f, 1f);
         player.setOnPreparedListener(mp -> {
@@ -630,7 +632,30 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     void seekBy(int delta) {
         if (source == Prefs.SOURCE_ADHAN) return;
-        if (source == Prefs.SOURCE_SURAH) seekTo(position + delta);
+        // a held key sends dozens a second: the first is applied now, the rest are one step at the window's end (SeekBurst)
+        int now = seekBurst.offer(delta, SystemClock.elapsedRealtime());
+        if (now != 0) applySeek(now);
+        if (seekBurst.hasPending()) {
+            handler.removeCallbacks(seekFlush);
+            handler.postDelayed(seekFlush, seekBurst.dueIn(SystemClock.elapsedRealtime()));
+        }
+    }
+
+    private final SeekBurst seekBurst = new SeekBurst();
+    private final Runnable seekFlush = new Runnable() {
+        @Override public void run() {
+            int d = seekBurst.flush(SystemClock.elapsedRealtime());
+            if (d != 0 && source != Prefs.SOURCE_ADHAN) applySeek(d);
+        }
+    };
+
+    private void resetSeekBurst() {
+        handler.removeCallbacks(seekFlush);
+        seekBurst.reset();
+    }
+
+    private void applySeek(int delta) {
+        if (source == Prefs.SOURCE_SURAH) seekTo(SeekBurst.target(position, delta, duration));   // a surah only; a station is live, a step there is next/prev
         else if (delta > 0) next();
         else if (delta < 0) prev();
     }
@@ -692,6 +717,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     }
 
     void stopPlayback() {
+        resetSeekBurst();
         if (source != Prefs.SOURCE_ADHAN) save();
         adhanVolumeBack();
         resumeAfterAdhan = false;
@@ -725,6 +751,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     }
 
     private void releasePlayer() {
+        resetSeekBurst();
         if (player != null) {
             try { player.reset(); } catch (Exception ignored) {}
             try { player.release(); } catch (Exception ignored) {}
@@ -771,13 +798,26 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     // ---- audio focus ----
 
+    /** surah, radio and adhan all play as media (the adhan's volume is the music stream's, see adhanVolumeUp); minSdk is 26, so no API guard */
+    private static final AudioAttributes MEDIA_ATTRS = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build();
+    private AudioFocusRequest focusRequest;
+
     private boolean requestFocus() {
-        return audio.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+        if (audio == null) return false;
+        if (focusRequest == null) {
+            focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(MEDIA_ATTRS)
+                    .setOnAudioFocusChangeListener(this, handler)   // the same listener, now on the main thread's handler as before
+                    .build();
+        }
+        return audio.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
     }
 
     private void abandonFocus() {
-        if (audio != null) audio.abandonAudioFocus(this);
+        if (audio != null && focusRequest != null) audio.abandonAudioFocusRequest(focusRequest);
     }
 
     @Override public void onAudioFocusChange(int change) {
