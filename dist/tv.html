@@ -979,19 +979,12 @@ function adhanLiveText(){
   const n = ADHAN_LIVE.prayer === 2 && isFriday() ? 'الجمعة' : ADHAN_PRAYER_NAMES[ADHAN_LIVE.prayer];
   return (n ? 'أذان ' + n : 'الأذان') + '  ·  ' + (ADHAN_LIVE.any ? 'أي زر' : 'اختيار') + ': إيقاف الأذان';
 }
-let adhanTicks = 0;
-function adhanLiveTick(force){
+function adhanLiveTick(){
   if(CONFIG.widget || !CONFIG.adhanBar || !(window.UrtvNative && window.UrtvNative.adhan)) return;
-  // asked every 3 s only around a prayer time (a minute before to ten after) or while it plays; once a minute otherwise (an adhan played by hand)
-  let near = !!ADHAN_LIVE || force === true || ++adhanTicks % 20 === 0;
-  if(!near && PRAYERS.length){
-    const p = riyadhParts(), mins = p.h*60 + p.mi + p.s/60;
-    near = PRAYERS.some(x => { const d = mins - (x.h*60 + x.mi); return d >= -1 && d <= 10; });
-  }
-  if(!near) return;
+  // asked every 3 s whenever the app answers (a call to the app's provider, about a millisecond): an adhan started by hand has no time to wait for
   let s = null;
   try{ const raw = window.UrtvNative.adhan(); s = raw ? JSON.parse(raw) : null; }catch(e){}
-  ADHAN_LIVE = s && s.live ? {prayer: +s.prayer, any: !!s.any} : null;
+  ADHAN_LIVE = s && s.live && typeof s.prayer === 'number' && isFinite(s.prayer) ? {prayer: +s.prayer, any: !!s.any} : null;
   tickAdhanBar();
 }
 function adhanBarText(){

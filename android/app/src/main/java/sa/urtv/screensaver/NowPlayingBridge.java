@@ -24,10 +24,12 @@ final class NowPlayingBridge {
         try {
             o.put("live", false);
             cur = c.getApplicationContext().getContentResolver().query(Uri.parse("content://sa.urtv.home.nowplaying/adhan"), null, null, null, null);
-            if (cur != null && cur.moveToFirst()) {
-                o.put("live", true);
-                o.put("prayer", cur.getInt(cur.getColumnIndexOrThrow("prayer")));
-                o.put("any", cur.getInt(cur.getColumnIndexOrThrow("any_key")) == 1);
+            if (cur != null && AdhanReply.valid(cur.getColumnNames()) && cur.moveToFirst()) {   // an older launcher answers with another row
+                int prayer = cur.getInt(cur.getColumnIndexOrThrow("prayer"));
+                boolean any = cur.getInt(cur.getColumnIndexOrThrow("any_key")) == 1;
+                o.put("prayer", prayer);
+                o.put("any", any);
+                o.put("live", true);   // last: nothing half read counts as an adhan
             }
         } catch (Exception ignored) {
         } finally {
