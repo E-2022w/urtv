@@ -1301,6 +1301,32 @@ for (const [width, height] of [[461, 250], [1920, 1080], [1280, 720], [960, 540]
     await none.ctx.close();
   }
 }
+const LONGER_GAMES = [['Manchester United', 'Borussia Monchengladbach', true, true], ['Al-Hilal', 'Al-Nassr', true, true]];   // one long row, one that always fits
+{   // fitting a game row: crests go first (that row only) and the full names stay; short names only when even that does not fit
+  for (const [width, height] of [[1920, 1080], [960, 540], [461, 250]]) {
+    const tag = `launcher matches card ${width}x${height}`;
+    const read = async games => {
+      const { p, ctx, errors } = await open('tv.html', 'teams=136013&panel=matches&widget=1', { width, height, net: crestNet([]) });
+      await p.evaluate(CREST_GAMES(games) + ' renderPanel(false); loadCrests();');
+      await p.waitForTimeout(300);
+      const rows = await p.evaluate(() => [...document.querySelectorAll('#week-list li.mg > .mr')].map(row => {
+        const nms = [...row.querySelectorAll('.nm')], vis = e => getComputedStyle(e).display !== 'none';
+        return { nocr: row.classList.contains('nocr'), crests: [...row.querySelectorAll('img.cr')].filter(vis).length,
+          gaps: [...row.querySelectorAll('.crgap')].filter(vis).length,
+          shortened: nms.some(n => n.dataset.full !== undefined && n.textContent !== n.dataset.full), fits: fits(row) };
+      }));
+      await ctx.close();
+      return { rows, errors };
+    };
+    const long = await read(LONGER_GAMES), short = await read(SHORT_GAMES);
+    const order = long.rows.every(r => !(r.shortened && !r.nocr) && !(r.nocr && (r.crests || r.gaps)) && r.fits);
+    check(`${tag}: a row that does not fit with its crests loses them (the row beside it keeps its own) and keeps the full names; a name is shortened only after that (no crest or gap left on such a row)`,
+      !long.errors.length && long.rows.length === 2 && order && long.rows[1].crests >= 1 && !long.rows[1].nocr, JSON.stringify(long.rows));
+    check(`${tag}: a row that fits with its crests keeps them, with the full names`,
+      !short.errors.length && short.rows.length === 2 && short.rows.every(r => !r.nocr && !r.shortened && r.crests >= 1 && r.fits), JSON.stringify(short.rows));
+    console.log(`  (${tag}: long and short row: ${long.rows.map(r => r.nocr ? (r.shortened ? 'no crests, short names' : 'no crests, full names') : 'with crests').join(' | ')})`);
+  }
+}
 for (const [width, height] of [[461, 250], [1920, 1080], [1280, 720], [960, 540]]) {
   for (const digits of ['hindi', 'latin']) {
     const tag = `launcher matches card ${width}x${height} ${digits}`;
@@ -3113,7 +3139,7 @@ const oneLine = p => p.evaluate(() => [...(((CARDS.find(c => c.eff === 'matches'
     // right to left: the home club, its crest, the score, the guest's crest, the guest club (a missing crest leaves its name next to the score)
     order: [h.nm, h.cr, mid, a.cr, a.nm].filter(Boolean).map(cen).every((x, k, all) => !k || x < all[k - 1]),
     gapHome: h.cr ? Math.abs(bx(h.cr).right - bx(h.nm).left) : 0, gapAway: a.cr ? Math.abs(bx(a.nm).right - bx(a.cr).left) : 0,
-    crests: [h.cr, a.cr].filter(Boolean).length, domHome: h.cr ? !!(h.nm.compareDocumentPosition(h.cr) & 4) : true, domAway: a.cr ? !!(a.cr.compareDocumentPosition(a.nm) & 4) : true,
+    crests: [h.cr, a.cr].filter(Boolean).length, shown: [h.cr, a.cr].filter(e => e && getComputedStyle(e).display !== 'none').length, domHome: h.cr ? !!(h.nm.compareDocumentPosition(h.cr) & 4) : true, domAway: a.cr ? !!(a.cr.compareDocumentPosition(a.nm) & 4) : true,
     date: (row.querySelector('.mwhen') || {}).textContent || '', dt: row.querySelector('.dt').textContent.replace(/\s+/g, ' ').trim(), size: row.style.fontSize,
     font: parseFloat(getComputedStyle(row).fontSize),
   };
@@ -3152,8 +3178,11 @@ for (const width of [400, 330]) {   // a narrow box: the steps down the ladder, 
   const rows = await oneLine(o.p), r = await homeProbe(o.p);
   check(`home matches alone, ${width} px wide: one line each, the short date or a smaller size, nothing cut or ending in «…»`,
     !o.errors.length && rows.length === 3 && rows.every(x => x.oneLine && !x.cut && !x.dots && x.inside) && !r.cut.length && !r.dots.length, JSON.stringify([rows, r]));
-  check(`home matches alone, ${width} px wide: the long names took their short form and every row still has its date`,
-    rows[2].text.includes('اليونايتد') && rows.every(x => x.date), JSON.stringify(rows.map(x => [x.text, x.date, x.size])));
+  // the long row loses its crests first and keeps the full names; only a card too narrow for that takes the short names
+  check(`home matches alone, ${width} px wide: the long row has no crests, ${width === 400 ? 'keeps its full names' : 'takes the short names'}, and every row still has its date`,
+    rows[2].shown === 0 && rows.every(x => x.date) && (width === 400 ? rows[2].text.includes('مانشستر يونايتد') : rows[2].text.includes('اليونايتد')),
+    JSON.stringify(rows.map(x => [x.text, x.date, x.size, x.shown])));
+  if (width === 400) check(`home matches alone, ${width} px wide: rows that fit with their crests keep them`, rows[0].shown === 2 && rows[1].shown === 1, JSON.stringify(rows.map(x => x.shown)));
   await o.ctx.close();
 }
 {   // a smaller card step brings the whole names and date back where they now fit, and the other way round
