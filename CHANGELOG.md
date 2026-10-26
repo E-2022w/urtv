@@ -26,6 +26,8 @@ Newest first. `next` is where changes land first; a release is what was tested t
 - Android's own core packages are never disabled; reset puts back the values the backup recorded.
 
 **Setup and tools**
+- The home switch can always be undone: a nonce on the safety switch, a heartbeat check before switching, a journal read on the next run, and `optimize/restore-home.sh`.
+- Reports are built from an allowlist of fields, with the scrub as a second net.
 - Pair over Wireless debugging, find the TV again, and check first that it is Android TV with a new enough WebView.
 - Community lists for TVs our own lists do not know; the setup wizard and TCL auto-start are handled.
 - The setup shows what was turned off and lets a person keep any of it.
