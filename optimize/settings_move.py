@@ -29,7 +29,7 @@ for stream in (sys.stdout, sys.stderr):   # Windows writes pipes in its own code
         stream.reconfigure(encoding="utf-8", errors="replace", newline="\n")
 
 ROOT = Path(__file__).resolve().parents[1]
-PY = os.environ.get("PY") or "optimize/venv/bin/python"          # runs optimize/tv.py, as saver.sh does
+PY = os.environ.get("PY_TV") or sys.executable   # runs optimize/tv.py: this very Python (on Windows the venv's "python" is a shell script that subprocess cannot start); PY_TV is for the tests
 BEFORE = os.environ.get("SETTINGS_BEFORE") or "optimize/run/settings-before-import.json"
 SAVER = "am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver."
 HOME = "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home."
@@ -68,7 +68,7 @@ ADHAN_VOLUME = (10, 100)
 MAX_TEXT = 60                          # a city or team name
 OWN = "own"                            # the person's own recording: only in the file saved before an import (it stays on that TV)
 
-COORD = {"lat": (-90.0, 90.0, r"-?\d{1,2}(\.\d+)?"), "lon": (-180.0, 180.0, r"-?\d{1,3}(\.\d+)?")}   # the receiver's patterns
+COORD = {"lat": (-90.0, 90.0, r"-?[0-9]{1,2}(\.[0-9]+)?"), "lon": (-180.0, 180.0, r"-?[0-9]{1,3}(\.[0-9]+)?")}   # the receiver's patterns
 ZONE_SHAPE = re.compile(r"[A-Za-z][A-Za-z0-9_+\-]*(/[A-Za-z0-9_+\-]+){0,2}")
 MAX_FILE = 100_000
 
@@ -324,7 +324,7 @@ def text_problem(v, what, bad=""):
         return f"{what} must be 1 to {MAX_TEXT} characters"
     if "'" in v:
         return f"{what}: no apostrophes please"
-    if any(unicodedata.category(c).startswith("C") for c in v):
+    if any(unicodedata.category(c).startswith("C") and c not in "\u200c\u200d" for c in v):   # the joiners Arabic and Persian names need are fine; control, bidi and other format characters are not
         return f"{what} has a control character"
     if any(c in v for c in bad):
         return f"{what} must not have any of {bad}"
@@ -468,7 +468,7 @@ def validate(d):
                 x = obj(x, f"teams[{i}]", ("id", "name"), errs, notes)
                 if x is None:
                     continue
-                if not isinstance(x.get("id"), str) or not re.fullmatch(r"\d{1,12}", x["id"]):
+                if not isinstance(x.get("id"), str) or not re.fullmatch(r"[0-9]{1,12}", x["id"]):
                     errs.append(f"teams[{i}].id must be the club's number, digits only"); continue
                 name = x.get("name", "")
                 if name != "" and (p := text_problem(name, f"teams[{i}].name", ",;|")):
@@ -536,6 +536,19 @@ def no_duplicates(pairs):
     return out
 
 
+def find_file(name):
+    """The file the person named: a relative name is the caller's (saver.sh hands over the directory it was run from; it moves to the
+    repository root first), else the repository root's, so `import optimize/run/settings-before-import.json` works from anywhere."""
+    p = Path(name)
+    if p.is_absolute():
+        return p
+    caller = os.environ.get("SAVER_CALLER_DIR")
+    for base in ([Path(caller)] if caller else []) + [ROOT]:
+        if (base / p).is_file():
+            return base / p
+    return (Path(caller) if caller else ROOT) / p
+
+
 def load(path):
     """The file's validated settings (a dict), plus the keys that are ignored; Refused with the reason otherwise."""
     p = Path(path)
@@ -552,6 +565,8 @@ def load(path):
     except json.JSONDecodeError as e:
         raise Refused(f"{path} is not complete or not valid JSON (line {e.lineno}, column {e.colno}: {e.msg}): was the export "
                       "cut short? export it again")
+    except RecursionError:
+        raise Refused(f"{path} is nested too deeply to be a settings file")
     except ValueError as e:
         raise Refused(f"{path} is not valid: {e}")
     if not isinstance(d, dict):
@@ -657,11 +672,11 @@ def apply(changes, names, before_path):
     why = None
     try:
         if new_cmd:
+            saver_in = True   # before the send: if the answer is lost after the TV applied it, it still gets put back
             out = tv(new_cmd)
             if failed_answer(out):
+                saver_in = False   # the app checks the whole SET first and refused it: nothing of it was applied
                 why = out
-            else:
-                saver_in = True
         for h in new_home if why is None else []:
             home_tried += 1
             out = tv(h)
@@ -680,13 +695,21 @@ def apply(changes, names, before_path):
         return True
     # put the old values back: the saver's in one SET, every adhan setting that was sent (the failed one too), last first
     undone = True
-    try:
-        if saver_in:
-            undone &= not failed_answer(tv(old_cmd))
-        for h in reversed(old_home[:home_tried]):
-            undone &= not failed_answer(tv(h))
-        if saver_in and rescheduled(changes):
+    steps = []
+    if saver_in:
+        steps.append(old_cmd)
+    steps += list(reversed(old_home[:home_tried]))
+    for cmd in steps:   # one step failing never stops the others
+        try:
+            undone &= not failed_answer(tv(cmd))
+        except TvError:
+            undone = False
+    if saver_in and rescheduled(changes):
+        try:
             reschedule()
+        except TvError:
+            pass
+    try:
         undone &= not mismatches(changes, 1)
     except TvError:
         undone = False
@@ -731,7 +754,8 @@ def import_main(args):
     files = [a for a in args if a != "--yes"]
     if len(files) != 1 or files[0].startswith("-"):
         raise Refused("usage: optimize/saver.sh import FILE.json [--yes]   (without --yes it only shows what would change)")
-    new, ignored = load(files[0])
+    source = find_file(files[0])
+    new, ignored = load(source)
     for k in ignored:
         print(f"ignored (not a setting this version moves): {k}")
     cur = read_tv(keep_own=True)
@@ -750,12 +774,16 @@ def import_main(args):
         print("Nothing was sent. Run the same command with --yes to apply it.")
         return 0
     before = Path(BEFORE) if os.path.isabs(BEFORE) else ROOT / BEFORE
-    try:
-        before.parent.mkdir(parents=True, exist_ok=True)
-        before.write_text(json.dumps(cur, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    except OSError as e:
-        raise Refused(f"could not save the TV's settings before the import ({e}): nothing was sent")
-    print(f"The TV's settings from before are saved in {BEFORE}")
+    if before.exists() and source.exists() and before.samefile(source):
+        # this IS the undo file: keep it as it is, it is still the way back to the settings before the first import
+        print(f"This is the file the last import saved: it is kept as it is ({BEFORE}), so it stays the way back.")
+    else:
+        try:
+            before.parent.mkdir(parents=True, exist_ok=True)
+            before.write_text(json.dumps(cur, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        except OSError as e:
+            raise Refused(f"could not save the TV's settings before the import ({e}): nothing was sent")
+        print(f"The TV's settings from before are saved in {BEFORE}")
     if not apply(changes, names, BEFORE):
         return 1
     print(f"Done: {len(changes)} setting{'s' if len(changes) != 1 else ''} changed. To undo: "

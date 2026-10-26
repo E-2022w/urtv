@@ -4,7 +4,7 @@ answers like the apps do (GET, SET, GET_PLAYER and the adhan broadcasts). No TV 
 
     python3 tests/settings_move_test.py
 
-The module runs with PY pointed at the fake (as saver.sh passes the TV's runner) and SETTINGS_BEFORE at a temporary file,
+The module runs with PY_TV (the test-only override of the Python that runs tv.py) pointed at the fake and SETTINGS_BEFORE at a temporary file,
 so the real optimize/run is never touched.
 """
 import copy
@@ -42,6 +42,11 @@ def out(text=None):
     else:
         print('Broadcast completed: result=0, data="' + text + '"')
     sys.exit(0)
+for sub in list(st.get("fail_once", [])):  # the TV does not answer at all, once, for a command with this in it
+    if sub in cmd:
+        st["fail_once"].remove(sub)
+        json.dump(st, open(st_path, "w"))
+        sys.exit(1)
 for bad in st.get("refuse", []):          # a value the TV refuses (answers error:)
     if bad in cmd:
         out("error: refused by the fake TV: " + bad)
@@ -80,7 +85,9 @@ if "SaverReceiver" in cmd and re.search(r"screensaver\.SET( |$)", cmd):
         elif k == "markets": s["markets"] = v.split(",")
         elif k in ("lat", "lon", "tz"): pass
         else: s[k] = v
+    lost = st.pop("lose_reply", False)             # the TV applied it, but the answer never arrives
     json.dump(st, open(st_path, "w"))
+    if lost: sys.exit(1)
     out("saved\n" + "city: " + s["city"][0])
 if "MusicReceiver" in cmd and "ADHAN_RESCHEDULE" in cmd:
     out()
@@ -151,7 +158,7 @@ class Tv:
         return [l for l in self.sent() if not l.endswith(".GET") and not l.endswith(".GET_PLAYER")]
 
     def run(self, *args):
-        env = {**os.environ, "PY": str(fake), "FAKE_TV": str(self.state), "FAKE_LOG": str(self.log), "SETTINGS_BEFORE": str(self.before)}
+        env = {**os.environ, "PY_TV": str(fake), "FAKE_TV": str(self.state), "FAKE_LOG": str(self.log), "SETTINGS_BEFORE": str(self.before)}
         r = subprocess.run([sys.executable, "-I", str(MODULE), *args], capture_output=True, text=True, env=env, encoding="utf-8", cwd=tmp)
         return r.returncode, r.stdout, r.stderr
 
@@ -435,6 +442,67 @@ for words in (["export"], ["import", "a.json", "--yes"]):
 check("saver.sh with no words lists export and import", "saver.sh export" in subprocess.run(["bash", str(ROOT / "optimize/saver.sh")], capture_output=True, text=True).stdout, "")
 check("the default before-file is optimize/run/settings-before-import.json (git-ignored)", sm.BEFORE == "optimize/run/settings-before-import.json"
       and "optimize/run/" in (ROOT / ".gitignore").read_text(), sm.BEFORE)
+
+# ---- Windows and the Python that runs tv.py
+check("PY defaults to this very Python (the venv's python can be a shell script on Windows), PY_TV is the test-only override",
+      'os.environ.get("PY_TV") or sys.executable' in MODULE.read_text(encoding="utf-8") and "optimize/venv/bin/python" not in MODULE.read_text(encoding="utf-8").split("def tv(")[0].split("PY =")[1].split("\n")[0].split("#")[0])
+env_off = {k: v for k, v in os.environ.items() if k not in ("PY", "PY_TV")}
+code = "import importlib.util,sys;s=importlib.util.spec_from_file_location('m',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.PY==sys.executable)"
+check("with no PY_TV set the module runs tv.py with sys.executable, whatever PY says", subprocess.run([sys.executable, "-c", code, str(MODULE)], capture_output=True, text=True, env={**env_off, "PY": "/nonexistent/venv/bin/python"}).stdout.strip() == "True", "")
+
+# ---- rollback: the reply to the saver's SET is lost after the TV applied it
+lost = Tv("lost", BASE)
+lost.edit(lose_reply=True)
+rc, out, err = lost.run("import", write("lost.json", exp), "--yes")
+check("a lost reply to the saver SET: the import fails with !! and the TV is put back (the SET had been applied)", rc != 0 and "!! The import failed" in out
+      and "put back as it was" in out and lost.data()["saver"] == BASE["saver"], (rc, out, lost.data()["saver"]))
+
+# ---- rollback: one put-back step failing does not stop the others
+mid = Tv("mid", BASE)
+mid.edit(refuse=["ADHAN_VOLUME"], fail_once=["ADHAN_SHORT --ez on false"])      # volume is refused (the import fails); the put-back of «short» gets no answer
+rc, out, err = mid.run("import", write("mid.json", exp), "--yes")
+d = mid.data()
+check("a put-back step that gets no answer: !! says the TV could NOT be put back completely, with the file to import", rc != 0 and "could NOT be put back" in out and str(mid.before) in out, (rc, out))
+check("and every other put-back still happened (the saver's settings and the other adhan ones are as before)",
+      d["saver"] == BASE["saver"] and d["adhan"]["voice"] == BASE["adhan"]["voice"] and d["adhan"]["fajr_voice"] == BASE["adhan"]["fajr_voice"]
+      and d["adhan"]["stopkey"] == BASE["adhan"]["stopkey"] and d["adhan"]["on"] == BASE["adhan"]["on"], d)
+
+# ---- undo with the before-file keeps that file as it is
+u = Tv("u", BASE)
+uf = write("u-moved.json", exp)
+u.run("import", uf, "--yes")
+original = u.before.read_bytes()
+rc, out, err = u.run("import", str(u.before), "--yes")
+check("undo: the before-file is not overwritten by its own import (it stays the way back)", rc == 0 and u.before.read_bytes() == original and "kept as it is" in out, (rc, out))
+check("and the undo itself worked", u.data()["saver"] == BASE["saver"] and u.data()["adhan"] == BASE["adhan"], u.data())
+rc, out, err = u.run("import", str(u.before), "--yes")
+check("importing the before-file again is still harmless (nothing to change)", rc == 0 and u.before.read_bytes() == original, (rc, out))
+
+# ---- relative file names: the caller's directory, else the repository root
+caller = tmp / "caller"
+caller.mkdir(exist_ok=True)
+(caller / "here.json").write_text(json.dumps(exp, ensure_ascii=False), encoding="utf-8")
+r1 = Tv("r1", BASE)
+env = {**os.environ, "PY_TV": str(fake), "FAKE_TV": str(r1.state), "FAKE_LOG": str(r1.log), "SETTINGS_BEFORE": str(r1.before), "SAVER_CALLER_DIR": str(caller)}
+r = subprocess.run([sys.executable, "-I", str(MODULE), "import", "here.json"], capture_output=True, text=True, env=env, encoding="utf-8", cwd=ROOT)
+check("a relative FILE is looked for in the directory saver.sh was run from", r.returncode == 0 and "Preview:" in r.stdout, (r.stdout, r.stderr))
+r = subprocess.run([sys.executable, "-I", str(MODULE), "import", "nothing-here.json"], capture_output=True, text=True, env=env, encoding="utf-8", cwd=ROOT)
+check("a file that is nowhere is refused, nothing sent", r.returncode != 0 and "is not a file" in r.stderr and not r1.writes(), (r.stdout, r.stderr))
+
+# ---- names and ids
+refused("team id in Arabic-Indic digits (the TV refuses them)", lambda d: d.update(teams=[{"id": "\u0661\u0662\u0663", "name": "x"}]), "teams[0].id")
+joiner = copy.deepcopy(GOOD)
+joiner["teams"] = [{"id": "1", "name": "\u06af\u200c\u0644"}]
+joiner["city"]["name"] = "\u0645\u06cc\u200d\u0632"
+jt = Tv("j", BASE)
+rc, out, err = jt.run("import", write("joiner.json", joiner))
+check("a zero-width (non-)joiner in a name is fine (Persian and Arabic names need it)", rc == 0 and "Preview:" in out, (rc, out, err))
+for ch, label in (("\u202e", "right-to-left override"), ("\u2066", "isolate"), ("\u200f", "right-to-left mark"), ("\ufeff", "byte order mark"), ("\u0007", "bell")):
+    refused(f"a {label} in a team name", lambda d, ch=ch: d.update(teams=[{"id": "1", "name": "a" + ch + "b"}]), "control character")
+deep = write("deep.json", "[" * 20000 + "]" * 20000)
+rd = Tv("deep", BASE)
+rc, out, err = rd.run("import", deep)
+check("a file nested too deeply is refused, not a traceback", rc != 0 and "nested too deeply" in err and "Traceback" not in err and not rd.sent(), (rc, err[-200:]))
 
 # ---- the choice lists are the apps' own (they cannot drift)
 prefs = (ROOT / "android/app/src/main/java/sa/urtv/screensaver/Prefs.java").read_text(encoding="utf-8")

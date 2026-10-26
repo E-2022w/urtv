@@ -244,7 +244,7 @@ case "${1:-}" in
     # the home app's adhan alarm was set for the old minutes: set it again now (no launcher, no harm)
     [ "$rc" != 0 ] || "$PY" -I optimize/tv.py "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN_RESCHEDULE" > /dev/null 2>&1 || true
     exit "$rc" ;;
-  export|import) "$PY" -I optimize/settings_move.py "$@" ;;   # the logic is in Python: validated before anything is sent
+  export|import) SAVER_CALLER_DIR="${OLDPWD:-}" "$PY" -I optimize/settings_move.py "$@" ;;   # the logic is in Python: validated before anything is sent
   find-team) shift; "$PY" -I optimize/find-team.py "$@" ;;   # Arabic or English name
   *) sed -n '2,/^# Only ADB/p' "$0"; exit 1 ;;
 esac
