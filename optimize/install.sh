@@ -274,9 +274,9 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       "$PY" -I optimize/tv.py --push-b64 optimize/deadman.sh /data/local/tmp/deadman.sh || return 1
       printf '%s\n' \
         "${old_nonce:+touch /data/local/tmp/home_ok.$old_nonce}" \
-        "rm -f /data/local/tmp/home_ok.$NONCE" \
+        "rm -f /data/local/tmp/home_ok /data/local/tmp/home_ok.$NONCE" \
         "for f in /data/local/tmp/home_ok.* /data/local/tmp/home_pid.* /data/local/tmp/home_hb.*; do case \$f in *.$NONCE|*.${old_nonce:-none}|*'*') ;; *) rm -f \$f ;; esac; done" \
-        "nohup sh /data/local/tmp/deadman.sh $STOCK 300 $NONCE > /dev/null 2>&1 &" \
+        "if command -v setsid > /dev/null 2>&1; then setsid sh /data/local/tmp/deadman.sh $STOCK 300 $NONCE < /dev/null > /dev/null 2>&1 & else nohup sh /data/local/tmp/deadman.sh $STOCK 300 $NONCE < /dev/null > /dev/null 2>&1 & fi" \
         | grep . | "$PY" -I optimize/tv.py --batch || return 1
       # alive = its pid answers and its heartbeat is under 25 s old (it writes one every 10 s)
       alive=no
@@ -285,11 +285,16 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
         res=$("$PY" -I optimize/tv.py "p=\$(cat /data/local/tmp/home_pid.$NONCE 2> /dev/null); h=\$(cat /data/local/tmp/home_hb.$NONCE 2> /dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2> /dev/null && [ -n \"\$h\" ] && [ \$((\$(date +%s) - h)) -le 25 ]; then echo WATCHDOG_ALIVE; else echo WATCHDOG_DEAD; fi") || return 1
         if grep -q WATCHDOG_ALIVE <<< "$res"; then alive=yes; break; fi
       done
-      if [ "$alive" != yes ]; then
-        jstate aborted
-        return 5   # nothing was switched: without a safety switch on the TV the home is not touched
+      if [ "$alive" = yes ]; then
+        echo "Safety switch armed and running: the stock home comes back by itself in 5 minutes unless the new home works."
+      else
+        # Seen on a TCL with Android 14: a background job started over ADB ends the moment the ADB session closes (setsid and nohup
+        # did not help), so there is no safety switch on the TV itself. The switch is still checked and undone from this computer
+        # (below), and the journal restores it on the next run if this computer stops in the middle. Not an error: it is the
+        # protection every earlier install had.
+        jsafety unavailable
+        echo "This TV ends background jobs when the ADB session closes, so there is no safety switch on the TV itself. The switch is checked and undone from this computer, and the journal restores it on the next run."
       fi
-      echo "Safety switch armed and running: the stock home comes back by itself in 5 minutes unless the new home works."
 
       # 3. Switch: the HOME role (Android 10+; the classic set-home-activity for older sets and as a backup), then
       #    the setup app off, then the stock home (this order avoided the black screen).
@@ -377,9 +382,6 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
     2) echo "!! Home did not open the new launcher. The stock home was put back."
        echo "   Some TCL firmware pins Home to the stock launcher; on those sets keep the stock home."
        echo "   If the line above said the setup wizard owns the Wi-Fi, keep the stock home too: never turn the wizard off by hand."
-       exit 1 ;;
-    5) echo "!! The safety switch did not start on the TV (no heartbeat), so the home was NOT switched and nothing was changed."
-       echo "   Run the same command again; if it repeats, restart the TV, check it is on Wi-Fi, and try once more."
        exit 1 ;;
     *) echo "!! The safety switch put the stock home back (ADB was too slow). Nothing is broken: run the same command again."
        exit 1 ;;

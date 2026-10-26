@@ -9,6 +9,7 @@ app's preview of the same page and `measure.sh` writes «not measured»). Times 
 
 | TV | Android | Home switch | Screensaver from ADB | ADB | Watch out for | Typical time |
 |---|---|---|---|---|---|---|
+| TCL with Android 14 (seen on the owner's TV; model not recorded) | 14 | works | not reported | 5555 | background jobs started over ADB end the moment the ADB session closes (nohup and setsid too), so the 5-minute on-TV safety switch cannot stay alive: `install.sh launcher` says so and relies on this computer plus the journal; the stock home is still put back at once if Home does not open ours | not reported |
 | TCL Smart TV Pro (G05) · 8 reports | 11 | works | yes | 5555 | `com.tcl.smartalexa` ships off outside Alexa's regions, expected | 14 min |
 | TCL Smart TV Pro (G07) · 8 reports | 11 | works | yes | 5555 | sometimes slow to come back after a restart; `com.tcl.smartalexa` ships off outside Alexa's regions, expected | 14 min |
 | TCL Smart TV Pro (C05) · 2 reports | 11 | works | not reported | not reported | the remote's Guard (cleaner) button opens only `com.tcl.guard`, so that package stays on unless picked | not reported |

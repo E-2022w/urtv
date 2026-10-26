@@ -21,6 +21,7 @@ case "$1" in
     in=$(cat)
     case "$in" in
       *nohup*) log arm; rm -f "$T/home_ok"
+        case "$in" in *"rm -f /data/local/tmp/home_ok /data/local/tmp/home_ok."*"command -v setsid"*"setsid sh /data/local/tmp/deadman.sh"*"< /dev/null"*"else nohup sh"*"< /dev/null"*) log armline-ok ;; esac
         echo "$in" | sed -n 's/.*deadman.sh [^ ]* [0-9]* \([^ ]*\) .*/\1/p' > "$T/nonce"
         case "$in" in *"touch /data/local/tmp/home_ok."*) log supersede ;; esac ;;
       *"am force-stop com.android.tv.settings"*)
@@ -128,6 +129,7 @@ def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None,
     jf = tree / "optimize" / "run" / "home-switch.json"
     if jf.exists():
         log.append("rhb-" + [l for l in jf.read_text().splitlines() if '"role_holder_before"' in l][0].split('"')[3])
+        log.append("safety-" + ([l for l in jf.read_text().splitlines() if '"safety_switch"' in l] or ['"x": "none"'])[0].split('"')[3])
         log.append("journal-" + [l for l in jf.read_text().splitlines() if '"state"' in l][0].split('"')[3])
     if (t / "verifier").exists():
         log.append("final-" + (t / "verifier").read_text().strip())
@@ -193,10 +195,13 @@ cases += [
      run("w", 0, ""),
      lambda c, o, l: c == 0 and l.count("hb-check") == 1 and l.index("hb-check") < l.index("switch") and l.count("disarm") == 1
      and "disarm-wrong" not in l and l[-1] == "journal-done" and "supersede" not in l),
-    ("the safety switch is dead (no heartbeat): the home is NOT switched, nothing changed, the journal says aborted",
+    ("the safety switch cannot stay alive on the TV (no heartbeat, as on a TCL Android 14): a plain line, no !!, the switch goes on and is confirmed, the journal says so",
      run("x", 0, "", watchdog="dead"),
-     lambda c, o, l: c == 1 and l.count("hb-check") == 5 and "switch" not in l and "restore-stock" not in l and "disarm" not in l
-     and "NOT switched" in o and l[-1] == "journal-aborted"),
+     lambda c, o, l: c == 0 and l.count("hb-check") == 5 and "no safety switch on the TV itself" in o and "!!" not in o and "switch" in l
+     and "disarm" in l and "Launcher is home" in o and l[-1] == "journal-done" and "safety-unavailable" in l),
+    ("a TV where the safety switch does stay alive: the journal says armed", run("xa", 0, ""), lambda c, o, l: c == 0 and "safety-armed" in l),
+    ("setsid first (with nohup as the fallback), both with stdin closed, and the stale plain home_ok is removed when arming",
+     run("xb", 0, ""), lambda c, o, l: c == 0 and "armline-ok" in l),
     ("a restart mid-switch (journal «switching», Home not ours, no marker): the stock home is put back from the journal first, then the switch goes on",
      run("y", 0, "", seed=("switching", "other.launcher"), seed_home="stock"),
      lambda c, o, l: c == 0 and "earlier home switch was cut off" in o and l.index("restore-stock") < l.index("arm") and "holder-other" in l
