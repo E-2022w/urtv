@@ -269,6 +269,7 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       printf '%s\n' \
         "${old_nonce:+touch /data/local/tmp/home_ok.$old_nonce}" \
         "rm -f /data/local/tmp/home_ok.$NONCE" \
+        "for f in /data/local/tmp/home_ok.* /data/local/tmp/home_pid.* /data/local/tmp/home_hb.*; do case \$f in *.$NONCE|*.${old_nonce:-none}|*'*') ;; *) rm -f \$f ;; esac; done" \
         "nohup sh /data/local/tmp/deadman.sh $STOCK 300 $NONCE > /dev/null 2>&1 &" \
         | grep . | "$PY" -I optimize/tv.py --batch || return 1
       # alive = its pid answers and its heartbeat is under 25 s old (it writes one every 10 s)
@@ -300,8 +301,8 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       if grep -A2 -F "\$ pm disable-user --user 0 ${STOCK%%/*}" <<< "$stepout" | grep -qi 'illegal'; then
         printf '%s\n' "cmd role add-role-holder --user 0 android.app.role.HOME ${STOCK%%/*}" \
           "cmd package set-home-activity --user 0 $STOCK" "pm enable com.google.android.tungsten.setupwraith" \
-          "touch /data/local/tmp/home_ok.$NONCE" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null || true
-        jstate restored
+          "touch /data/local/tmp/home_ok.$NONCE" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null \
+          && jstate restored   # only when it went through: else the journal stays «switching» and the next run redoes it
         return 4
       fi
     fi
@@ -319,14 +320,14 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       # wizard's recovery screen as Home (seen on a TCL G07 with the stock home off and the wizard on)
       printf '%s\n' "pm enable ${STOCK%%/*}" "pm enable $WRAITH" \
         "cmd role add-role-holder --user 0 android.app.role.HOME ${STOCK%%/*}" "cmd package set-home-activity --user 0 $STOCK" \
-        "touch /data/local/tmp/home_ok.$NONCE" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null || true
-      jstate restored
+        "touch /data/local/tmp/home_ok.$NONCE" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null \
+        && jstate restored   # (see above: not «restored» if the batch did not go through)
       return 2
     fi
     "$PY" -I optimize/tv.py "touch /data/local/tmp/home_ok.$NONCE" || return 1
     # the switch may have fired already if ADB was very slow: then the stock home is back
     res=$("$PY" -I optimize/tv.py "cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN") || return 1
-    grep -q sa.urtv.home <<< "$res" || return 3
+    grep -q sa.urtv.home <<< "$res" || { jstate restored; return 3; }   # the safety switch fired: the stock home is back
     jstate done
   }
 

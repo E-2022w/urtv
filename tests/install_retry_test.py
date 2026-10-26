@@ -38,9 +38,11 @@ case "$1" in
         fi
         [ "$NOHOME" = yes ] && { echo stock > "$T/home"; exit 0; }   # firmware or the wizard keeps Home
         echo ours > "$T/home" ;;
-      *"pm enable"*"touch /data/local/tmp/home_ok"*) log restore-stock; echo stock > "$T/home"
+      *"pm enable"*"touch /data/local/tmp/home_ok"*) [ "$RESTORE_FAIL" = yes ] && { log restore-fail; exit 1; }
+        log restore-stock; echo stock > "$T/home"
         case "$in" in *"add-role-holder --user 0 android.app.role.HOME other.launcher"*) log holder-other ;; esac
-        case "$in" in *"pm enable com.old.helper"*) log helpers ;; esac ;;
+        case "$in" in *"pm enable com.old.helper"*) log helpers ;; esac
+        case "$in" in *"pm enable other.launcher"*) log enable-holder ;; esac ;;
       *) log other-batch ;;
     esac
     exit 0 ;;
@@ -95,7 +97,7 @@ while [ $# -gt 0 ]; do [ "$1" = -o ] && : > "$2"; shift; done
 
 
 def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None, curl_mode="", vanish="", illegal="", wraith_home="", wifi="", nohome="", install_mode="",
-        watchdog="", seed=None, seed_home="", seed_marker=False, role="", script="install.sh", args=("launcher",)):
+        watchdog="", restore_fail="", seed=None, seed_home="", seed_marker=False, role="", script="install.sh", args=("launcher",)):
     t = Path(tempfile.mkdtemp())
     tree, bin_ = t / "tree", t / "bin"
     (tree / "optimize" / "lists").mkdir(parents=True); bin_.mkdir()
@@ -119,7 +121,7 @@ def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None,
         (bin_ / f).write_text(body); (bin_ / f).chmod(0o755)
     if verifier is not None:
         (t / "verifier").write_text(verifier + "\n")
-    env = dict(os.environ, WATCHDOG=watchdog, ROLE=role, INSTALL_MODE=install_mode, NOHOME=nohome, WRAITH_HOME=wraith_home, WIFI=wifi, ILLEGAL=illegal, VERIFY=verify, VANISH=vanish, CURL_MODE=curl_mode, PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), T=str(t),
+    env = dict(os.environ, RESTORE_FAIL=restore_fail, WATCHDOG=watchdog, ROLE=role, INSTALL_MODE=install_mode, NOHOME=nohome, WRAITH_HOME=wraith_home, WIFI=wifi, ILLEGAL=illegal, VERIFY=verify, VANISH=vanish, CURL_MODE=curl_mode, PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), T=str(t),
                FAIL_SWITCHES=str(fail_switches), FIRST_DROP=first_drop, DOWN_POLLS=str(down_polls))
     r = subprocess.run(["bash", str(tree / "optimize" / script), *args], env=env, capture_output=True, text=True)
     log = (t / "log").read_text().split() if (t / "log").exists() else []
@@ -198,7 +200,10 @@ cases += [
     ("a restart mid-switch (journal «switching», Home not ours, no marker): the stock home is put back from the journal first, then the switch goes on",
      run("y", 0, "", seed=("switching", "other.launcher"), seed_home="stock"),
      lambda c, o, l: c == 0 and "earlier home switch was cut off" in o and l.index("restore-stock") < l.index("arm") and "holder-other" in l
-     and "supersede" in l and l.count("restore-stock") == 1 and l[-1] == "journal-done"),
+     and "supersede" in l and l.count("restore-stock") == 1 and "enable-holder" in l and l[-1] == "journal-done"),
+    ("Home never opens ours and the put-back batch fails (ADB drops): the journal stays «switching», so the next run redoes it",
+     run("af", 0, "", nohome="yes", restore_fail="yes"),
+     lambda c, o, l: c == 1 and "restore-fail" in l and l[-1] == "journal-switching"),
     ("a switch that confirmed itself (its marker is on the TV): the journal is not acted on",
      run("z", 0, "", seed=("switching", ""), seed_home="stock", seed_marker=True),
      lambda c, o, l: c == 0 and "cut off" not in o and "restore-stock" not in l),

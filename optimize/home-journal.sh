@@ -26,6 +26,7 @@ jrestore() {
   if [ "${1:-}" = full ]; then
     while read -r l; do cmds+=("pm enable $l"); done < <(grep -vE '^\s*(#|$)' optimize/lists/home-replaced.txt | awk '{print $1}')
   fi
+  [ "$holder" = "$pkg" ] || cmds+=("pm enable $holder")   # another launcher that was home before
   cmds+=("cmd role add-role-holder --user 0 android.app.role.HOME $holder")
   [ "$holder" != "$pkg" ] || cmds+=("cmd package set-home-activity --user 0 $stock")
   [ -z "$nonce" ] || cmds+=("touch $TV_TMP/home_ok.$nonce")   # a safety switch still running stops
