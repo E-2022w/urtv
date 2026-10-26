@@ -11,12 +11,23 @@ STUB = r'''#!/usr/bin/env bash
 # fake: python -I optimize/tv.py <args>; the TV's settings are files in $T/tv (a missing file: not set)
 shift 2
 S="$T/tv"; mkdir -p "$S"
+refused() { case " $REFUSE " in *" $1 "*) return 0 ;; esac; return 1; }
+num() { case "$1" in active) echo 10 ;; working_set) echo 20 ;; frequent) echo 30 ;; rare) echo 40 ;; restricted) echo 45 ;; never) echo 50 ;; esac; }
+apply_line() {
+  set -- $1
+  case "$1 $2" in
+    "settings put"|"device_config put") refused "$4" || echo "$5" > "$S/$4" ;;
+    "settings delete"|"device_config delete") refused "$4" || rm -f "$S/$4" ;;
+    "am set-standby-bucket") refused standby_bucket || num "$4" > "$S/standby_bucket" ;;
+    "cmd appops") refused "$5" || { [ "$6" = default ] && rm -f "$S/op_$5" || echo "$6" > "$S/op_$5"; } ;;
+  esac
+}
 case "$1" in
-  --batch) while read -r l; do echo "$l" >> "$T/batch"; case "$l" in "settings put global "*|"settings delete global "*|"device_config put "*|"device_config delete "*)
-             case " $REFUSE " in *" $(echo "$l" | awk '{print ($1=="settings") ? $4 : $4}') "*) ;; *) set -- $l
-               case "$1 $2" in "settings put") echo "$5" > "$S/$4" ;; "settings delete") rm -f "$S/$4" ;; "device_config put") echo "$5" > "$S/$4" ;; "device_config delete") rm -f "$S/$4" ;; esac ;; esac ;; esac; done ;;
+  --batch) while read -r l; do echo "$l" >> "$T/batch"; apply_line "$l"; done ;;
   "settings get global "*) f="$S/${1##* }"; [ -f "$f" ] && cat "$f" || echo null ;;
   "device_config get activity_manager "*) f="$S/${1##* }"; [ -f "$f" ] && cat "$f" || echo null ;;
+  "am get-standby-bucket "*) [ "$UNREADABLE" = yes ] && exit 0; [ -f "$S/standby_bucket" ] && cat "$S/standby_bucket" || echo 10 ;;
+  "appops get "*) [ "$UNREADABLE" = yes ] && exit 0; op=${1##* }; [ -f "$S/op_$op" ] && echo "$op: $(cat "$S/op_$op")" || echo "No operations." ;;
   "df -k /data"*) echo "/dev/x 16777216 4194304 12582912 25% /data" ;;
 esac
 exit 0
@@ -35,8 +46,8 @@ class Tv:
         (self.t / "tv").mkdir()
         for k, v in settings.items():
             (self.t / "tv" / k).write_text(v + "\n")
-    def run(self, mode, refuse=""):
-        env = dict(os.environ, T=str(self.t), PY=str(self.t / "py"), REFUSE=refuse)
+    def run(self, mode, refuse="", unreadable=""):
+        env = dict(os.environ, T=str(self.t), PY=str(self.t / "py"), REFUSE=refuse, UNREADABLE=unreadable)
         r = subprocess.run(["bash", str(self.tree / "optimize" / "tweaks.sh"), mode], env=env, capture_output=True, text=True, cwd=self.tree)
         return r.returncode, r.stdout + r.stderr
     def get(self, k):
@@ -97,4 +108,33 @@ check("restore with no journal: Android's defaults, and it says so", rc == 0 and
 tv = Tv(window_animation_scale="1.0", transition_animation_scale="1.0", animator_duration_scale="1.0")
 tv.run("apply"); rc, out = tv.run("status")
 check("status: was and now, beside each other", "- tweak window_animation_scale: was 1.0, now 0.5" in out and "- tweak cached_apps_freezer: was null, now enabled" in out, out)
+
+# 8. the Play Store's standby bucket and background appops: recorded, restored exactly, read back
+tv = Tv(window_animation_scale="1.0", transition_animation_scale="1.0", animator_duration_scale="1.0", standby_bucket="30", op_RUN_IN_BACKGROUND="ignore")
+rc, out = tv.run("apply")
+check("apply: the Play Store's own bucket and appops are recorded (frequent, ignore, and none set -> default)",
+      "standby_bucket=frequent" in tv.journal() and "appop_RUN_IN_BACKGROUND=ignore" in tv.journal() and "appop_RUN_ANY_IN_BACKGROUND=default" in tv.journal(), tv.journal())
+check("apply: restricted and deny are in place and read back without a !!", tv.get("standby_bucket") == "45" and tv.get("op_RUN_IN_BACKGROUND") == "deny" and "!!" not in out, out)
+rc, out = tv.run("restore")
+check("restore: the bucket and the appops it had, not active/allow; an appop with no mode is back to default",
+      tv.get("standby_bucket") == "30" and tv.get("op_RUN_IN_BACKGROUND") == "ignore" and tv.get("op_RUN_ANY_IN_BACKGROUND") == "null" and "!!" not in out,
+      f"{out} {[tv.get(k) for k in ('standby_bucket', 'op_RUN_IN_BACKGROUND', 'op_RUN_ANY_IN_BACKGROUND')]}")
+tv = Tv(window_animation_scale="1.0", transition_animation_scale="1.0", animator_duration_scale="1.0")
+rc, out = tv.run("apply", refuse="standby_bucket RUN_IN_BACKGROUND")
+check("apply: a TV that does not take the bucket or the appop gets a !! line each",
+      "!! standby_bucket: this TV did not take the value (asked for restricted, it says active)" in out and "!! appop_RUN_IN_BACKGROUND: this TV did not take" in out, out)
+tv = Tv(window_animation_scale="1.0", transition_animation_scale="1.0", animator_duration_scale="1.0", standby_bucket="30")
+tv.run("apply")
+rc, out = tv.run("restore", refuse="standby_bucket")
+check("restore: a bucket the TV refuses to put back is flagged and the journal is kept for another try",
+      "!! standby_bucket: this TV did not take the value (asked for frequent, it says restricted)" in out and tv.journal() is not None, out)
+tv = Tv(window_animation_scale="1.0", transition_animation_scale="1.0", animator_duration_scale="1.0")
+rc, out = tv.run("apply", unreadable="yes")
+check("a firmware that does not say what the Play Store had: recorded as unknown", "standby_bucket=unknown" in tv.journal() and "appop_RUN_IN_BACKGROUND=unknown" in tv.journal(), tv.journal())
+rc, out = tv.run("restore")
+check("restore then keeps today's values and says so with a !! line",
+      "!! standby_bucket: the TV's own value was not recorded" in out and "!! appop_RUN_IN_BACKGROUND: the TV's own value was not recorded" in out
+      and tv.get("standby_bucket") == "10" and tv.get("op_RUN_IN_BACKGROUND") == "allow", out)
+tv.run("apply"); rc, out = tv.run("status")
+check("status lists the Play Store's values too", "- tweak standby_bucket: was" in out and "now restricted" in out, out)
 sys.exit(1 if failed else 0)

@@ -32,32 +32,57 @@ putcmd() {   # key value: a value that was not set (null) is deleted
 }
 tvget() { local v; v=$("$PY" -I optimize/tv.py "$(getcmd "$1")" | tr -d '\r' | tail -n 1); echo "${v:-null}"; }
 jget() { sed -n "s/^$1=//p" "$JOURNAL" 2> /dev/null | head -n 1; }
+# The Play Store's standby bucket and background appops are recorded and restored the same way (names: the bucket by name, the
+# appops by mode; «default» when the TV has none set). A firmware that does not say gets «unknown» and today's values on restore.
+PS=com.android.vending
+PSKEYS="standby_bucket appop_RUN_IN_BACKGROUND appop_RUN_ANY_IN_BACKGROUND"
+bucket_name() { case "$1" in 10) echo active ;; 20) echo working_set ;; 30) echo frequent ;; 40) echo rare ;; 45) echo restricted ;; 50) echo never ;; *) echo unknown ;; esac; }
+psget() {
+  local o
+  case "$1" in
+    standby_bucket) o=$("$PY" -I optimize/tv.py "am get-standby-bucket $PS" 2> /dev/null | tr -d '\r' | tail -n 1 | tr -dc '0-9') || o=""
+                    bucket_name "$o" ;;
+    appop_*) o=$("$PY" -I optimize/tv.py "appops get $PS ${1#appop_}" 2> /dev/null | tr -d '\r' | head -n 1) || o=""
+             case "$o" in
+               "No operations"*) echo default ;;
+               "${1#appop_}: "*) o=${o#*: }; o=${o%%[;, ]*}; [[ "$o" =~ ^[a-z_]+$ ]] && echo "$o" || echo unknown ;;
+               *) echo unknown ;;
+             esac ;;
+  esac
+}
+psput() {   # key value
+  case "$1" in
+    standby_bucket) echo "am set-standby-bucket $PS $2" ;;
+    appop_*) echo "cmd appops set $PS ${1#appop_} $2" ;;
+  esac
+}
 verify() {   # key wanted: read back; a «!!» line when the TV did not take it
   local got; got=$(tvget "$1")
   if [ "$got" != "$2" ]; then echo "!! $1: this TV did not take the value (asked for $2, it says $got)"; return 1; fi
 }
 case "${1:?usage: optimize/tweaks.sh apply|restore|status}" in
   apply)   v=0.5; bucket=restricted; bg=deny ;;
-  restore) v=1.0; bucket=active;     bg=allow ;;
+  restore) v=1.0; bucket=active;     bg=allow ;;   # (what a TV with no record gets; with one, its own values)
   status)
     [ -f "$JOURNAL" ] || { echo "Tweaks: none recorded (nothing was changed by optimize/tweaks.sh apply)"; exit 0; }
     for k in $KEYS; do echo "- tweak $k: was $(jget "$k"), now $(tvget "$k")"; done
+    for k in $PSKEYS; do echo "- tweak $k: was $(jget "$k"), now $(psget "$k")"; done
     exit 0 ;;
   *) echo "usage: optimize/tweaks.sh apply|restore|status"; exit 1 ;;
 esac
-cmds=(
-  "am set-standby-bucket com.android.vending $bucket"
-  "cmd appops set com.android.vending RUN_IN_BACKGROUND $bg"
-  "cmd appops set com.android.vending RUN_ANY_IN_BACKGROUND $bg"
-)
+cmds=()
 want=()   # key=value pairs to read back
+pswant=() # the same for the Play Store's bucket and appops
 if [ "$1" = apply ]; then
   # the first apply records what the TV had (a later one, as after run.sh again, keeps that record: the TV is not "as it came" then)
   if [ ! -f "$JOURNAL" ]; then
     mkdir -p "$(dirname "$JOURNAL")"
     { echo "# what the TV had before optimize/tweaks.sh apply (null: it was not set); optimize/tweaks.sh restore puts exactly this back"
-      for k in $KEYS; do echo "$k=$(tvget "$k")"; done; } > "$JOURNAL.tmp" && mv "$JOURNAL.tmp" "$JOURNAL"
+      for k in $KEYS; do echo "$k=$(tvget "$k")"; done
+      for k in $PSKEYS; do echo "$k=$(psget "$k")"; done; } > "$JOURNAL.tmp" && mv "$JOURNAL.tmp" "$JOURNAL"
   fi
+  cmds+=("$(psput standby_bucket restricted)" "$(psput appop_RUN_IN_BACKGROUND deny)" "$(psput appop_RUN_ANY_IN_BACKGROUND deny)")
+  pswant+=("standby_bucket=restricted" "appop_RUN_IN_BACKGROUND=deny" "appop_RUN_ANY_IN_BACKGROUND=deny")
   for k in window_animation_scale transition_animation_scale animator_duration_scale; do cmds+=("$(putcmd "$k" "$v")"); want+=("$k=$v"); done
   if [ -n "$CACHED" ]; then   # opt-in only (see above); never raise the limit: low-RAM sets may sit below it
     now=$("$PY" -I optimize/tv.py "dumpsys activity settings 2> /dev/null | grep -m1 max_cached_processes" | tr -dc '0-9')
@@ -90,8 +115,18 @@ elif [ -f "$JOURNAL" ]; then
     if [[ "$o" =~ ^(null|[A-Za-z0-9_.-]+)$ ]]; then cmds+=("$(putcmd "$k" "$o")"); want+=("$k=$o")
     else echo "!! $k: the recorded value is not one this script puts back; left as it is"; fi
   done
+  for k in $PSKEYS; do
+    o=$(jget "$k")
+    if [[ "$o" =~ ^[a-z_]+$ ]] && [ "$o" != unknown ]; then cmds+=("$(psput "$k" "$o")"); pswant+=("$k=$o")
+    else   # the original could not be read on this firmware: today's values, said
+      d=allow; [ "$k" != standby_bucket ] || d=active
+      echo "!! $k: the TV's own value was not recorded (this firmware does not say), so $d is put back"
+      cmds+=("$(psput "$k" "$d")")
+    fi
+  done
   echo "Putting back the values the TV had before (optimize/run/tweaks-journal.txt)."
 else
+  cmds+=("$(psput standby_bucket active)" "$(psput appop_RUN_IN_BACKGROUND allow)" "$(psput appop_RUN_ANY_IN_BACKGROUND allow)")
   for k in window_animation_scale transition_animation_scale animator_duration_scale; do cmds+=("$(putcmd "$k" "$v")"); done
   cmds+=("$(putcmd max_cached_processes null)" "$(putcmd cached_apps_freezer device_default)")
   echo "No journal of the tweaks: Android's defaults."
@@ -99,6 +134,10 @@ fi
 printf '%s\n' "${cmds[@]}" | "$PY" -I optimize/tv.py --batch > /dev/null
 bad=0
 for kv in "${want[@]+"${want[@]}"}"; do verify "${kv%%=*}" "${kv#*=}" || bad=1; done
+for kv in "${pswant[@]+"${pswant[@]}"}"; do   # the standby bucket is the system's to move, so a mismatch is said, not fatal
+  got=$(psget "${kv%%=*}")
+  if [ "$got" != "${kv#*=}" ]; then echo "!! ${kv%%=*}: this TV did not take the value (asked for ${kv#*=}, it says $got)"; bad=1; fi
+done
 if [ "$1" = restore ] && [ -f "$JOURNAL" ] && [ "$bad" = 0 ]; then rm -f "$JOURNAL"; fi   # kept when the TV refused something
 if [ "$1" = apply ]; then echo "Animation scale $v, Play Store background: $bg, cached-app freezer: on"
 else echo "Tweaks undone, Play Store background: $bg"; fi
