@@ -28,6 +28,13 @@ check("a preview is not a live adhan (no bar, no stop)", "adhanLive = previewSec
 check("the home screen asks AdhanKeys first and consumes", "adhanKeys.decide(" in (HOME / "MainActivity.java").read_text(encoding="utf-8"))
 for f in ("ScreenDream.java", "MainActivity.java"):
     check(f"screensaver {f}: asks AdhanKeys before closing", "adhanKeys.decide(" in (APP / f).read_text(encoding="utf-8"))
+home = (HOME / "MainActivity.java").read_text(encoding="utf-8")
+check("«any key» is on by default", 'getBoolean("adhan_stopkey", true)' in (TIL / "Prefs.java").read_text(encoding="utf-8"))
+check("the home bar never takes the focus (no requestFocus on it): the focus stays where it was", "adhanBar.requestFocus" not in home and "adhanBarHeld" not in home)
+check("only the volume keys and the power family are left alone (Home, Back, settings, media all stop it)",
+      "KEYCODE_HOME" not in (HOME / "AdhanKeys.java").read_text(encoding="utf-8") and "KEYCODE_SETTINGS" not in (HOME / "AdhanKeys.java").read_text(encoding="utf-8"))
+check("no key-filter capability on this branch (that is work/khalid-settingskey, after a TV test)",
+      "canRequestFilterKeyEvents" not in (ROOT / "android/launcher/src/main/res/xml/sleep_service.xml").read_text(encoding="utf-8"))
 check("«أذان مختصر» and «إيقاف الأذان بأي زر» are rows of the adhan tab", "KIND_STOPKEY" in (TIL / "MainActivity.java").read_text(encoding="utf-8"))
 if not shutil.which("javac"):
     print("SKIP adhan keys: no javac here")

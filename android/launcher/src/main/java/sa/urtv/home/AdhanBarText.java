@@ -33,8 +33,8 @@ final class AdhanBarText {
         return null;
     }
 
-    /** the hint on the bar while the adhan plays: OK on the bar stops it, or any key when «إيقاف الأذان بأي زر» is on */
-    static final String STOP_OK = "اختيار: إيقاف الأذان", STOP_ANY = "أي زر: إيقاف الأذان";
+    /** the hint on the bar while the adhan plays: any key stops it (the default), or only OK on the bar when «إيقاف الأذان بأي زر» is off */
+    static final String STOP_OK = "اختيار: إيقاف الأذان", STOP_ANY = "أي زر يوقف الأذان";
 
     /**
      * The bar while the adhan is playing: «أذان المغرب  ·  اختيار: إيقاف الأذان». `prayer` is PrayerTimes' number (FAJR 0, DHUHR 2, ASR 3,

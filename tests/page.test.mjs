@@ -2483,12 +2483,14 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   const { p, ctx, errors } = await open('tv.html', 'panel=prayers', { now: '2026-10-22T10:00:00Z' });   // Thursday; far from a prayer
   const bar = () => p.evaluate(() => { const b = document.getElementById('adbar'); return { hidden: b.hidden, text: b.textContent }; });
   const ask = async (o) => { await p.evaluate(live(o) + ' adhanLiveTick();'); return bar(); };
-  let r = await ask({ live: true, prayer: 4, any: false });
-  check('adhan playing: the bar says «أذان المغرب  ·  اختيار: إيقاف الأذان»', !r.hidden && r.text === 'أذان المغرب  ·  اختيار: إيقاف الأذان', JSON.stringify(r));
+  let r = await ask({ live: true, prayer: 4, any: true });
+  check('adhan playing, any key stops it (the default): «أذان المغرب  ·  أي زر يوقف الأذان»', !r.hidden && r.text === 'أذان المغرب  ·  أي زر يوقف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: 4, any: false });
+  check('adhan playing with «إيقاف الأذان بأي زر» off: «أذان المغرب  ·  اختيار: إيقاف الأذان»', r.text === 'أذان المغرب  ·  اختيار: إيقاف الأذان', JSON.stringify(r));
   r = await ask({ live: true, prayer: 0, any: true });
-  check('adhan playing with «إيقاف الأذان بأي زر» on: «أي زر: إيقاف الأذان»', r.text === 'أذان الفجر  ·  أي زر: إيقاف الأذان', JSON.stringify(r));
-  r = await ask({ live: true, prayer: -1, any: false });
-  check('adhan from the computer (no prayer named): «الأذان  ·  اختيار: إيقاف الأذان»', r.text === 'الأذان  ·  اختيار: إيقاف الأذان', JSON.stringify(r));
+  check('Fajr: «أذان الفجر  ·  أي زر يوقف الأذان»', r.text === 'أذان الفجر  ·  أي زر يوقف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: -1, any: true });
+  check('adhan from the computer (no prayer named): «الأذان  ·  أي زر يوقف الأذان»', r.text === 'الأذان  ·  أي زر يوقف الأذان', JSON.stringify(r));
   r = await ask({ live: true, prayer: null, any: false });
   check('an answer with no prayer number is not an adhan (an old launcher): no bar', r.hidden, JSON.stringify(r));
   r = await ask(null);

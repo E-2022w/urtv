@@ -966,14 +966,14 @@ const ADHAN_BAR_MIN = 10;
 // rounded second; never less than one)
 const untilAdhan = leftMin => humanRemaining(Math.max(60, Math.round(leftMin * 60)));
 // while the adhan plays in the launcher (the screensaver only: window.UrtvNative.adhan() answers {"live":true,"prayer":4,"any":false}, "" otherwise)
-// the bar names it and says how to stop it: «أذان المغرب  ·  اختيار: إيقاف الأذان» («أي زر: إيقاف الأذان» when the setting is on). The same words
-// as the launcher's bar (AdhanBarText.playing). OK on it (or any key, with the setting) is handled by the app, which also keeps the dream open.
+// the bar names it and says how to stop it: «أذان المغرب  ·  أي زر يوقف الأذان» (the default; «اختيار: إيقاف الأذان» when «إيقاف الأذان بأي زر» is off). The same words
+// as the launcher's bar (AdhanBarText.playing). Any key (or only OK, when the setting is off) is handled by the app, which also keeps the dream open.
 let ADHAN_LIVE = null;
 const ADHAN_PRAYER_NAMES = {0:'الفجر', 2:'الظهر', 3:'العصر', 4:'المغرب', 5:'العشاء'};
 function adhanLiveText(){
   if(!ADHAN_LIVE) return '';
   const n = ADHAN_LIVE.prayer === 2 && isFriday() ? 'الجمعة' : ADHAN_PRAYER_NAMES[ADHAN_LIVE.prayer];
-  return (n ? 'أذان ' + n : 'الأذان') + '  ·  ' + (ADHAN_LIVE.any ? 'أي زر' : 'اختيار') + ': إيقاف الأذان';
+  return (n ? 'أذان ' + n : 'الأذان') + '  ·  ' + (ADHAN_LIVE.any ? 'أي زر يوقف الأذان' : 'اختيار: إيقاف الأذان');
 }
 function adhanLiveTick(){
   if(CONFIG.widget || !CONFIG.adhanBar || !(window.UrtvNative && window.UrtvNative.adhan)) return;

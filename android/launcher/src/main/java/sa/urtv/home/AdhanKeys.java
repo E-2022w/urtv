@@ -2,8 +2,8 @@ package sa.urtv.home;
 
 /**
  * What a key does while the adhan plays: OK on the adhan bar stops it, and with «إيقاف الأذان بأي زر» any key does, once; that press is
- * consumed whole (its repeats and its release too), so it never also opens the focused app or seeks the Quran. Home and Power belong to
- * Android and are never seen here; the volume keys stay ordinary. Stopping the adhan only ends the one that is playing: the next
+ * consumed whole (its repeats and its release too), so it never also opens the focused app or seeks the Quran. Power belongs to
+ * Android, and the volume keys stay ordinary (the adhan can be turned down); every other key stops it. Stopping the adhan only ends the one that is playing: the next
  * prayer's alarm is not touched. No Android state in here (KeyEvent's numbers are written out, so it runs without the SDK): tests/AdhanKeysRun.java runs it. The screensaver
  * carries the same file (its package line apart).
  */
@@ -20,11 +20,6 @@ final class AdhanKeys {
     private static final int KEYCODE_POWER = 26;
     private static final int KEYCODE_SLEEP = 223;
     private static final int KEYCODE_WAKEUP = 224;
-    private static final int KEYCODE_HOME = 3;
-    private static final int KEYCODE_APP_SWITCH = 187;
-    private static final int KEYCODE_ASSIST = 219;
-    private static final int KEYCODE_VOICE_ASSIST = 231;
-    private static final int KEYCODE_SETTINGS = 176;
     private static final int KEYCODE_UNKNOWN = 0;
 
     /** the key goes on as it would have */
@@ -59,7 +54,11 @@ final class AdhanKeys {
                 || keyCode == KEYCODE_BUTTON_A;
     }
 
-    /** Keys «any key» leaves alone: the volume (and mute), the power and home family, the assistant and the TV's own settings key. */
+    /**
+     * The only keys «any key» leaves alone: the volume (so the adhan can be turned down without stopping it) and the power family, which
+     * the system handles first. Home, Back, OK, the arrows, the numbers, the media keys and the settings key all stop it, when they reach
+     * the app at all (Android takes Home itself on most TVs).
+     */
     static boolean reserved(int keyCode) {
         switch (keyCode) {
             case KEYCODE_VOLUME_UP:
@@ -68,11 +67,6 @@ final class AdhanKeys {
             case KEYCODE_POWER:
             case KEYCODE_SLEEP:
             case KEYCODE_WAKEUP:
-            case KEYCODE_HOME:
-            case KEYCODE_APP_SWITCH:
-            case KEYCODE_ASSIST:
-            case KEYCODE_VOICE_ASSIST:
-            case KEYCODE_SETTINGS:
             case KEYCODE_UNKNOWN:
                 return true;
             default:

@@ -13,9 +13,10 @@
 #   optimize/music.sh adhan voice 3        which recording plays at Dhuhr, Asr, Maghrib and Isha (1-21, but the four Fajr ones are for Fajr only)
 #   optimize/music.sh adhan fajr-voice 10  «مؤذن الفجر»: the recording for Fajr (own = your own recording); default 10, «فجر الحرم المكي»
 #   optimize/music.sh adhan short on|off   «أذان مختصر»: the adhan stops after its first minute with a 3-second fade (off by default)
-#   optimize/music.sh adhan stopkey on|off   «إيقاف الأذان بأي زر» (off by default): while the adhan plays, any key on the remote stops it, once, and that
-#                                          press is consumed (it does not also open the focused app). Without it, «اختيار» (OK) on the adhan bar
-#                                          stops it. Home, Power and the volume keys stay Android's. Only that adhan ends; tomorrow's plays
+#   optimize/music.sh adhan stopkey on|off   «إيقاف الأذان بأي زر» (ON by default): while the adhan plays, the first key press on the home screen or the
+#                                          screensaver stops it and is consumed (it does not also open the focused app or move the focus); the
+#                                          volume keys and Power are left alone, Home, Back, OK, the arrows, numbers and media keys all stop it.
+#                                          Off: only OK on the adhan bar stops it. Inside other apps no key is caught. Only that adhan ends
 #   optimize/music.sh adhan stop           stop the adhan that is playing (nothing else)
 #   optimize/music.sh adhan volume 60      the adhan's own volume, 10-100 (percent of the TV's maximum)
 #   optimize/music.sh adhan add FILE       the person's own recording as the adhan («أذان من ملفي»): made small here (mono AAC, about
@@ -109,7 +110,7 @@ Usage: optimize/music.sh <command> [arguments]
   adhan voice <1-21 | own>   (not the Fajr recordings 10, 13, 17, 20)
   adhan fajr-voice <1-21 | own>
   adhan short on | off
-  adhan stopkey on | off  any key stops the adhan while it plays (default off: OK on the adhan bar stops it)
+  adhan stopkey on | off  any key stops the adhan while it plays (default on; off: only OK on the adhan bar)
   adhan stop              stop the adhan that is playing
   adhan volume <10-100>
   adhan add <file>        your own recording as the adhan (needs ffmpeg here); adhan own-clear removes it
@@ -266,7 +267,7 @@ PY
         [ $# -eq 2 ] || usage
         case "$2" in on) flag=true;; off) flag=false;; *) usage;; esac
         tv "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN_STOPKEY --ez on $flag" > /dev/null
-        if [ "$flag" = true ]; then echo "Any key stops the adhan while it plays (Home, Power and the volume keys stay Android's)."; else echo "Only OK on the adhan bar stops the adhan."; fi
+        if [ "$flag" = true ]; then echo "Any key stops the adhan while it plays, on the home screen and the screensaver (the volume keys and Power are left alone)."; else echo "Only OK on the adhan bar stops the adhan."; fi
         ;;
       stop)
         [ $# -eq 1 ] || usage

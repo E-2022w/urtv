@@ -119,10 +119,8 @@ public class MainActivity extends Activity {
     private HomeCard homeCard;
     private NowCard nowCard;   // «يُتلى الآن»: at the right end of the pills row while a surah or a station is on
     private Pill sleepPill;   // «مؤقت النوم», with the minutes left while it runs (shown while it has the focus)
-    private TextView adhanBar;   // «أذان المغرب بعد ٨ دقائق», over the top edge; while the adhan plays «أذان المغرب · اختيار: إيقاف الأذان»
+    private TextView adhanBar;   // «أذان المغرب بعد ٨ دقائق», over the top edge; while the adhan plays «أذان المغرب · أي زر يوقف الأذان»
     private final AdhanKeys adhanKeys = new AdhanKeys();
-    private boolean adhanBarHeld;       // the bar took the focus for the adhan that is playing
-    private View focusBeforeAdhan;      // and where it comes back to
     private View clockBlock, bottomBlock;   // the greeting, clock and date; the app title and the dock under it
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
@@ -1013,23 +1011,8 @@ public class MainActivity extends Activity {
         String words = AdhanBar.text(this, cfg);
         adhanBar.setVisibility(words == null ? View.GONE : View.VISIBLE);
         if (words != null) adhanBar.setText(words);
-        // while the adhan plays the bar takes the focus, so that OK on it stops the adhan (AdhanKeys); the focus goes back after
-        boolean live = words != null && AdhanBar.playing(cfg);
-        adhanBar.setFocusable(live);
-        if (live && !adhanBarHeld && hasWindowFocus()) {   // not over a dialog or a popup
-            adhanBarHeld = true;
-            View was = getCurrentFocus();
-            focusBeforeAdhan = was == adhanBar ? null : was;
-            adhanBar.requestFocus();
-        } else if (!live && adhanBarHeld) {
-            adhanBarHeld = false;
-            View back = focusBeforeAdhan;
-            focusBeforeAdhan = null;
-            if (adhanBar.hasFocus()) {
-                if (back != null && back.isShown()) back.requestFocus();
-                else if (!pills.isEmpty()) pills.get(0).requestFocus();
-            }
-        }
+        // any key stops the adhan (AdhanKeys) and the focus stays where it was; with «إيقاف الأذان بأي زر» off the bar is focusable (UP reaches it) and OK on it stops it
+        adhanBar.setFocusable(words != null && AdhanBar.playing(cfg));
     }
 
     private static String arabicDigits(String s) { return Digits.of(s); }   // the setting's digits (hindi or latin)
