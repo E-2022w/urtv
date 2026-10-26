@@ -36,6 +36,10 @@ final class PrayerMath {
      *      angles that Aladhan carries, and praytimes.org names the Egyptian method for Syria and Lebanon, so it is the closest honest choice
      *  23  Jordan, the Ministry of Awqaf, Islamic Affairs and Holy Places: Fajr 18°, Isha 18°, Maghrib 5 minutes after sunset (the idea
      *      and the figures of pull request 34; Aladhan's id 23)
+     *  21  Morocco, the Ministry of Habous and Islamic Affairs: Fajr 19°, Isha 17°, Dhuhr and Maghrib +5 minutes (Aladhan's id 21; angles and margins as the ITL
+     *      library's method-info lists the Moroccan Awqaf ministry)
+     *  19  Algeria, the Ministry of Religious Affairs and Awqaf: Fajr 18°, Isha 17° (Aladhan's id 19; the angles salahtimes.com and Aladhan's list give)
+     *  18  Tunisia, the Ministry of Religious Affairs: Fajr 18°, Isha 18° (Aladhan's id 18; salahtimes.com lists the ministry's method with these angles)
      * Asr is the shadow-length-one (Shafi'i) Asr for all of them; Maghrib is sunset (0.833°) except for the Ja'fari.
      */
     static final class Method {
@@ -51,7 +55,7 @@ final class PrayerMath {
         boolean ishaIsDelay() { return ishaMinutes > 0; }
     }
 
-    static final int JAFARI = 0, UMM_AL_QURA = 4, GULF = 8, KUWAIT = 9, QATAR = 10, DUBAI = 16, EGYPT = 5, JORDAN = 23;
+    static final int JAFARI = 0, UMM_AL_QURA = 4, GULF = 8, KUWAIT = 9, QATAR = 10, DUBAI = 16, EGYPT = 5, JORDAN = 23, MOROCCO = 21, ALGERIA = 19, TUNISIA = 18;
     private static final Method[] METHODS = {
         new Method(JAFARI, 16, 14, 0, 4),
         new Method(UMM_AL_QURA, 18.5, 0, 90, .833),
@@ -61,6 +65,9 @@ final class PrayerMath {
         new Method(DUBAI, 18.2, 18.2, 0, .833, -3, 3, 3, 3),
         new Method(EGYPT, 19.5, 17.5, 0, .833),
         new Method(JORDAN, 18, 18, 0, .833, 0, 0, 0, 5),
+        new Method(MOROCCO, 19, 17, 0, .833, 0, 5, 0, 5),
+        new Method(ALGERIA, 18, 17, 0, .833),
+        new Method(TUNISIA, 18, 18, 0, .833),
     };
 
     static Method method(int id) {
@@ -83,6 +90,9 @@ final class PrayerMath {
             case "Asia/Bahrain": case "Asia/Muscat": return GULF;
             case "Africa/Cairo": case "Asia/Damascus": case "Asia/Beirut": case "Asia/Gaza": case "Asia/Hebron": return EGYPT;
             case "Asia/Amman": return JORDAN;
+            case "Africa/Casablanca": return MOROCCO;
+            case "Africa/Algiers": return ALGERIA;
+            case "Africa/Tunis": return TUNISIA;
             default: return UMM_AL_QURA;
         }
     }
