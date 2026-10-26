@@ -677,6 +677,9 @@ const CONFIG = {
   // such numbers = none). The sunrise is not a prayer and is never moved. The screensaver sends it only while the setting is on.
   prayerAdj: (a => a.length === 5 && a.every(x => /^-?\d{1,2}$/.test(x.trim())) ? a.map(x => Math.max(-20, Math.min(20, parseInt(x, 10)))) : [0,0,0,0,0])(
     (_Q.get('adj') || '').split(',')),
+  // «فرق التاريخ الهجري»: #hijri=-2..2 moves every Hijri date by that many days, for places that start the month by moon sighting
+  // (Egypt, Jordan, the Levant, Morocco). The screensaver sends it only when it is not 0; anything else here = 0 = Umm al-Qura as it is.
+  hijri: (v => /^-?[0-2]$/.test(v) ? +v || 0 : 0)(_Q.get('hijri') || ''),
   // the slim year strip under the clock: #yearstrip=1 turns it on (anything else = off); the screensaver only, never the widget
   yearStrip: _Q.get('yearstrip') === '1',
   // #live=1 (the launcher): the «المهام» card is a button there (OK opens the list with the mic ready), so it carries a mic mark and
@@ -787,6 +790,20 @@ function nationalNow(){
   return null;
 }
 
+// «فرق التاريخ الهجري»: the instant to give the Umm al-Qura calendar (formatted in the city's zone) so that it answers for the city's day
+// plus CONFIG.hijri days. At 0 it is `d` itself. A summer-time change in between would move the same instant an hour: put it back on its day.
+function hijriAt(d){
+  const k = CONFIG.hijri;
+  if(!k) return d;
+  const p = riyadhParts(d);
+  let ms = d.getTime() + k*86400000;
+  const q = riyadhParts(new Date(ms));
+  ms += Date.UTC(p.y, p.mo - 1, p.d + k) - Date.UTC(q.y, q.mo - 1, q.d);
+  return new Date(ms);
+}
+// the same for a date held as UTC noon of a day (formatted with timeZone UTC): whole days, no summer time there
+const hijriUtc = d => CONFIG.hijri ? new Date(d.getTime() + CONFIG.hijri*86400000) : d;
+
 function tickDates(){
   const now = new Date();
   const nat = nationalNow(), nl = document.getElementById('natline');
@@ -794,9 +811,15 @@ function tickDates(){
   nl.hidden = !nat;
   if(nat) setText(nl, nat.name + ' ' + ar(nat.n) + nat.unit);
   try{
-    let h = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-' + NU,{
+    const hf = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-' + NU,{
       timeZone: CONFIG.timezone, weekday:'long', day:'numeric', month:'long', year:'numeric'
-    }).format(now);
+    });
+    let h;
+    if(!CONFIG.hijri) h = hf.format(now);
+    else{   // the day, month and year move; the weekday is today's
+      const wd = hf.formatToParts(now).find(x => x.type === 'weekday');
+      h = hf.formatToParts(hijriAt(now)).map(x => x.type === 'weekday' && wd ? wd.value : x.value).join('');
+    }
     h = h.replace(/\s*هـ\s*$/,'').replace(/،\s*$/,'');
     setText(document.getElementById('hijri'), h + ' هـ');
   }catch(e){}
@@ -1067,7 +1090,7 @@ function occasionNow(){
   const dayKey = FMT_DATE.format(new Date());
   if(OCC_CACHE.day === dayKey) return OCC_CACHE.val;
   const fmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{timeZone:CONFIG.timezone,year:'numeric',month:'numeric',day:'numeric'});
-  const hijri = d => fmt.formatToParts(d).reduce((a,x) => (a[x.type] = +x.value.replace(/[^0-9]/g,''), a), {});
+  const hijri = d => fmt.formatToParts(hijriAt(d)).reduce((a,x) => (a[x.type] = +x.value.replace(/[^0-9]/g,''), a), {});
   const base = Date.now();
   let val = null, found = {};
   for(let i = 0; i < 400 && !val; i++){
@@ -1092,7 +1115,7 @@ function occasionNow(){
 function hijriMonthNow(){
   try{
     return +new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{timeZone:CONFIG.timezone,month:'numeric'})
-      .format(new Date()).replace(/[^0-9]/g,'');
+      .format(hijriAt(new Date())).replace(/[^0-9]/g,'');
   }catch(e){ return 0; }
 }
 function tickOccasion(){
@@ -1838,7 +1861,7 @@ function fastingNext(now){
   const p = riyadhParts(now), base = Date.UTC(p.y, p.mo - 1, p.d, 12);
   for(let i = 0; i < 12; i++){
     const date = new Date(base + i*86400000);
-    const h = FAST_HIJRI.formatToParts(date).reduce((a, x) => (a[x.type] = +x.value.replace(/[^0-9]/g, ''), a), {});
+    const h = FAST_HIJRI.formatToParts(hijriUtc(date)).reduce((a, x) => (a[x.type] = +x.value.replace(/[^0-9]/g, ''), a), {});
     const why = fastReasons(h.month, h.day, date.getUTCDay());
     if(!why.length || (i === 0 && p.h >= FAST_TODAY_UNTIL && why[0] !== 'ramadan')) continue;
     return {key:why[0], days:i, day:h.day, wd:date.getUTCDay(), date};

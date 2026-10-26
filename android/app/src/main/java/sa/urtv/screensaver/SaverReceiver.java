@@ -21,7 +21,7 @@ import java.util.Locale;
  *   am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.SET
  *       [--es city 'الرس'] [--es lat 25.86 --es lon 43.49 --es tz Asia/Kuwait]   (tz is needed for a place that is not in the list) [--es teams '136013:Al-Hilal,150643:Al-Zulfi']
  *       [--es panel prayers] [--es home_panel prayers,hourly,verse|none] [--es greeting on|off] [--es adhanbar on|off] [--es yearstrip on|off] [--es minrating 7] [--es genres Drama,Comedy] [--es langs English]
- *       [--es photos 30] [--es idle 10] [--es digits hindi|latin]
+ *       [--es photos 30] [--es idle 10] [--es digits hindi|latin] [--es hijrioffset -2..2]
  *       [--es cardstyle current|dark1|glass1|dark3|glass3] [--es national auto|off]
  *       [--es markets tasi,gold,btc] [--es mkstyle arrows|prices] [--es mkbar on|off] [--es clocksize large|medium|small] [--es stocks 2222,1120,AAPL]
  *       [--es leagues 'Saudi-Arabian Pro League,NBA']
@@ -186,6 +186,12 @@ public class SaverReceiver extends BroadcastReceiver {
             if (adj == null) adj = p.prayerAdj();
             adj[k] = n;
         }
+        Integer hijriOffset = null;   // «فرق التاريخ الهجري»: a whole number of days, -2..2
+        String hijriExtra = i.getStringExtra("hijrioffset");
+        if (hijriExtra != null) {
+            hijriOffset = HijriOffset.parse(hijriExtra.trim());
+            if (hijriOffset == null) return "error: hijrioffset is a whole number of days from -" + HijriOffset.MAX + " to " + HijriOffset.MAX + ", like -1 or +1 (0 = Umm al-Qura as it is)";
+        }
         String yearStrip = i.getStringExtra("yearstrip");
         if (yearStrip != null && !"on".equals(yearStrip) && !"off".equals(yearStrip))
             return "error: yearstrip is one of on off";
@@ -286,6 +292,7 @@ public class SaverReceiver extends BroadcastReceiver {
         if (yearStrip != null) p.setYearStrip("on".equals(yearStrip));
         if (prayerMethod != null) p.setPrayerMethod(PrayerMethod.parse(prayerMethod));
         if (adj != null) p.setPrayerAdj(adj);
+        if (hijriOffset != null) p.setHijriOffset(hijriOffset);
         if (prayerAdj != null) p.setPrayerAdjOn("on".equals(prayerAdj));
         if (rating != null) p.setMinRating(rating);
         if (photos != null) p.setPhotoMinutes(photos);
@@ -406,6 +413,7 @@ public class SaverReceiver extends BroadcastReceiver {
             + "\nyearstrip: " + (p.yearStrip() ? "on" : "off")
             + "\nprayermethod: " + p.prayerMethod()
             + "\nprayeradj: " + (p.prayerAdjOn() ? "on" : "off") + " " + PrayerAdj.describe(p.prayerAdj())
+            + "\nhijrioffset: " + HijriOffset.describe(p.hijriOffset())
             + "\nminrating: " + p.minRating()
             + "\nphotos: " + p.photoMinutes()
             + "\ndigits: " + p.digits()
