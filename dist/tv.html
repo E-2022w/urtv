@@ -908,7 +908,7 @@ const PRAYER_METHODS = {
 function computePrayers(){
   const p = riyadhParts(), lat = CONFIG.latitude, lng = CONFIG.longitude;
   const M = PRAYER_METHODS[CONFIG.prayerMethod] || PRAYER_METHODS[4];
-  const noon = Date.UTC(p.y,p.mo-1,p.d,12), tz = tzOffsetMs(noon - tzOffsetMs(noon)) / 3600000;   // the city's offset at its local noon (a change of clocks the same day does not move the whole day)
+  const noonUtc = Date.UTC(p.y,p.mo-1,p.d,12), tz = tzOffsetMs(noonUtc - tzOffsetMs(noonUtc)) / 3600000;   // the city's offset at its local noon (a change of clocks the same day does not move the whole day)
   const rad = d => d*Math.PI/180, deg = r => r*180/Math.PI;
   const fix = (a,b) => { a = a - b*Math.floor(a/b); return a < 0 ? a + b : a; };
   const jd0 = Date.UTC(p.y,p.mo-1,p.d)/86400000 + 2440587.5 - lng/(15*24);
