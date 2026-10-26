@@ -46,6 +46,7 @@ final class Location {
      */
     static boolean noteDue(boolean freshInstall, boolean chosen, int shown) { return freshInstall && !chosen && shown < NOTE_STARTS; }
 
-    /** «المدينة: الرياض. لتغييرها: الإعدادات ← الموقع», on the screensaver and in the settings' top row. */
-    static String note(String city) { return "المدينة: " + city + ". لتغييرها: الإعدادات ← الموقع"; }
+    /** «المدينة: الرياض. لتغييرها: الإعدادات ثم الموقع», on the screensaver and in the settings' top row. Words, not «←»: Thmanyah has
+     *  no arrows (a fallback font would draw one), and «‹›» point one way or the other as the renderer mirrors them or not. */
+    static String note(String city) { return "المدينة: " + city + ". لتغييرها: الإعدادات ثم الموقع"; }
 }

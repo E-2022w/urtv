@@ -190,12 +190,12 @@
   .week li.lv .lvt .tm{gap:.35em}
   .week li.lv .lvt .tm .cr{width:1.35em;height:1.35em;margin:0}
   .week li.lv .sc{color:var(--gold-hi);font-size:1.25em;font-weight:700;font-variant-numeric:tabular-nums;padding:0 .1em}
-  /* «الصلاة القادمة»: the name lit, its time, and the time left; the line may wrap between them, never inside one */
+  /* «الصلاة القادمة»: the name lit, its time, and the time left (as large and as bright as the time: the most useful part); the line
+     may wrap between them, never inside one */
   .week li.np{display:flex;flex-wrap:wrap;align-items:baseline;gap:.15em .5em;white-space:normal;border-bottom:none;padding:1.2vh 0 .6vh}
   .week li.np > *{flex:0 0 auto;max-width:none;overflow:visible;text-overflow:clip;padding:0;margin:0;white-space:nowrap}
   .week li.np b{font-weight:500;color:var(--gold-hi)}
   .week li.np .t{font-variant-numeric:tabular-nums}
-  .week li.np .r{font-size:.8em;color:#B9AE96}
   /* «يومك»: a small name, then the thing itself (it may wrap, never «…»), then when */
   .week li.td{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.1em .8em;align-items:baseline;white-space:normal}
   .week li.td > span{max-width:none;overflow:visible;text-overflow:clip;padding:0;margin:0}   /* not the list rows' first-name rule */
@@ -399,7 +399,7 @@
     font-size:clamp(12px,1.02vw,20px);font-weight:300;letter-spacing:.3em;color:#D8CDB6;
   }
   /* the first starts while no city was ever set (#citynote=1): one quiet line under the city, gone after ten minutes */
-  .citynote{margin-top:.9vh;font-size:clamp(11px,.86vw,17px);font-weight:300;color:#B9AE96}
+  .citynote{margin-top:1vh;font-size:clamp(14px,1.1vw,21px);font-weight:400;color:#D8CDB6}
   .citynote[hidden]{display:none}
   .subline .dot{width:5px;height:5px;border-radius:50%;background:var(--gold);opacity:.9}
 
@@ -2597,7 +2597,7 @@ function shortHM(sec){   // «١ س و ٥ د», «٢ س», «٥ د»
   const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
   return [h ? ar(h) + ' س' : '', m || !h ? ar(Math.max(m, 1)) + ' د' : ''].filter(Boolean).join(' و ');
 }
-// ---- «الصلاة القادمة»: one line, «المغرب ٥:٢١ م · بعد ١ ساعة و ٩ دقائق», the calm one of the prayer cards (after Isha: tomorrow's Fajr)
+// ---- «الصلاة القادمة»: one line, «المغرب ٥:٢١ م، بعد ١ ساعة و ٩ دقائق», the calm one of the prayer cards (after Isha: tomorrow's Fajr)
 function nextPrayerRows(){
   if(!PRAYERS.length) return [];
   const p = riyadhParts(), mins = p.h * 60 + p.mi + p.s / 60;
@@ -2605,7 +2605,7 @@ function nextPrayerRows(){
   if(!n){ n = PRAYERS[0]; tomorrow = true; }
   // in the words of the bar and of the screensaver's own «الصلاة القادمة» (untilAdhan): the same minutes at the same second
   const left = untilAdhan(n.h * 60 + n.mi + (tomorrow ? 1440 : 0) - mins);
-  return [`<li class="np"><b>${prayerName(n)}</b><span class="t">${fmt12(n.h, n.mi)}</span><span class="r">· بعد ${left}</span></li>`];
+  return [`<li class="np"><b>${prayerName(n)}</b><span class="t">${fmt12(n.h, n.mi)}،</span><span class="r">بعد ${left}</span></li>`];   // «،», not «·»: beside «م» it reads as «٠»
 }
 
 function prayerRowCard(){
@@ -3272,7 +3272,7 @@ function boot(){
   if(cs) cs.textContent = clockSubText();
   const cn = document.getElementById('citynote');
   if(cn && CONFIG.cityNote){   // Location.note in the app says the same in the settings' top row
-    cn.textContent = 'المدينة: ' + CONFIG.city + '. لتغييرها: الإعدادات ← الموقع';
+    cn.textContent = 'المدينة: ' + CONFIG.city + '. لتغييرها: الإعدادات ثم الموقع';   // words, not «←» (not in Thmanyah) nor «‹›» (mirrored or not by the renderer)
     cn.hidden = false;
     setTimeout(() => { cn.hidden = true; }, 10*60*1000);
   }

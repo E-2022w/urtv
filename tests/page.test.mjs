@@ -1569,10 +1569,10 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) for (const clock of ['large', 'small']) {
     const { p, ctx, errors } = await open('tv.html', `citynote=1&clocksize=${clock}&yearstrip=1`, { width, height });
     const r = await p.evaluate(() => { const n = document.getElementById('citynote'), b = n.getBoundingClientRect(), w = document.querySelector('.week').getBoundingClientRect();
-      return { text: n.textContent, shown: !n.hidden && b.height > 0, lines: Math.round(b.height / parseFloat(getComputedStyle(n).lineHeight || 20)), inside: b.left >= 0 && b.right <= innerWidth && b.bottom <= innerHeight,
+      return { text: n.textContent, size: parseFloat(getComputedStyle(n).fontSize), shown: !n.hidden && b.height > 0, lines: Math.round(b.height / parseFloat(getComputedStyle(n).lineHeight || 20)), inside: b.left >= 0 && b.right <= innerWidth && b.bottom <= innerHeight,
         clear: b.right <= w.left + 1 || b.left >= w.right - 1 || b.bottom <= w.top || b.top >= w.bottom }; });
-    check(`first-run note at ${width}x${height}, clock ${clock}: «المدينة: الرياض. لتغييرها: الإعدادات ← الموقع» in one line under the city, clear of the card, no script errors`,
-      !errors.length && r.text === 'المدينة: الرياض. لتغييرها: الإعدادات ← الموقع' && r.shown && r.inside && r.clear, JSON.stringify(r) + errors.join('; '));
+    check(`first-run note at ${width}x${height}, clock ${clock}: «المدينة: الرياض. لتغييرها: الإعدادات ثم الموقع» in one line under the city, 14–22 px, clear of the card, no script errors`,
+      !errors.length && r.text === 'المدينة: الرياض. لتغييرها: الإعدادات ثم الموقع' && r.size >= 14 && r.size <= 22 && (width < 1920 || r.size >= 20) && r.shown && r.inside && r.clear, JSON.stringify(r) + errors.join('; '));
     await ctx.close();
   }
   {   // never on the launcher's cards, and it goes after ten minutes
@@ -1593,14 +1593,14 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   }
 }
 
-// ---- «الصلاة القادمة»: one line, «المغرب ٥:٤٥ م · بعد ١ ساعة و ٥ دقائق» (the panel's and the bar's words), the name lit; every style, three sizes, both digit systems
+// ---- «الصلاة القادمة»: one line, «المغرب ٥:٤٥ م، بعد ١ ساعة و ٥ دقائق» (the panel's and the bar's words), the name lit; every style, three sizes, both digit systems
 {
   const TIMES = "buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'19:15'});";
   for (const [when, want, label] of [
-      ['2026-10-22T13:40:00Z', 'المغرب٥:٤٥ م· بعد ١ ساعة و ٥ دقائق', 'Thursday 16:40'],
-      ['2026-10-23T07:00:00Z', 'الجمعة١١:٤٠ ص· بعد ١ ساعة و ٤٠ دقيقة', 'Friday morning: الجمعة'],
-      ['2026-10-22T14:40:00Z', 'المغرب٥:٤٥ م· بعد ٥ دقائق', 'five minutes before Maghrib'],
-      ['2026-10-22T17:10:00Z', 'الفجر٤:٥٠ ص· بعد ٨ ساعات و ٤٠ دقيقة', 'after Isha: tomorrow\'s Fajr']]) {
+      ['2026-10-22T13:40:00Z', 'المغرب٥:٤٥ م،بعد ١ ساعة و ٥ دقائق', 'Thursday 16:40'],
+      ['2026-10-23T07:00:00Z', 'الجمعة١١:٤٠ ص،بعد ١ ساعة و ٤٠ دقيقة', 'Friday morning: الجمعة'],
+      ['2026-10-22T14:40:00Z', 'المغرب٥:٤٥ م،بعد ٥ دقائق', 'five minutes before Maghrib'],
+      ['2026-10-22T17:10:00Z', 'الفجر٤:٥٠ ص،بعد ٨ ساعات و ٤٠ دقيقة', 'after Isha: tomorrow\'s Fajr']]) {
     for (const [hash, width, height] of [['panel=nextprayer', 1920, 1080], ['panel=nextprayer', 1280, 720], ['panel=nextprayer', 960, 540], ['panel=nextprayer&widget=1', 461, 250]]) {
       for (const style of label === 'Thursday 16:40' ? ['current', 'dark1', 'glass1', 'dark3', 'glass3'] : ['current']) {
         for (const digits of label === 'Thursday 16:40' ? ['hindi', 'latin'] : ['hindi']) {
@@ -1611,7 +1611,7 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
             const li = [...document.querySelectorAll('#week-list li')], card = document.querySelector('.week').getBoundingClientRect(), np = document.querySelector('#week-list li.np');
             const parts = np ? [...np.children] : [];
             return { n: li.length, hd: document.getElementById('week-hd').textContent, text: np ? np.textContent : '', lit: np ? getComputedStyle(np.querySelector('b')).color : '',
-              plain: np ? getComputedStyle(np.querySelector('.t')).color : '', whole: parts.every(x => x.getClientRects().length === 1 && x.scrollWidth <= x.clientWidth + 1),
+              plain: np ? getComputedStyle(np.querySelector('.t')).color : '', left: np ? [getComputedStyle(np.querySelector('.r')).color, getComputedStyle(np.querySelector('.r')).fontSize, getComputedStyle(np.querySelector('.t')).fontSize] : [], whole: parts.every(x => x.getClientRects().length === 1 && x.scrollWidth <= x.clientWidth + 1),
               inside: parts.every(x => { const b = x.getBoundingClientRect(); return b.left >= card.left - 1 && b.right <= card.right + 1 && b.bottom <= card.bottom + 1; }),
               h: Math.round(np ? np.getBoundingClientRect().height : 0), font: np ? parseFloat(getComputedStyle(np).fontSize) : 0 };
           });
@@ -1622,7 +1622,7 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
           const toLatin = x => x.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
           const tag = `next prayer ${label} ${width}x${height}${hash.includes('widget') ? ' card' : ''} ${style} ${digits}`;
           check(`${tag}: one line «${want}» under «الصلاة القادمة», the name lit, inside the card, no script errors`,
-            !errors.length && r.n === 1 && r.hd === 'الصلاة القادمة' && r.text === (digits === 'latin' ? toLatin(want) : want) && r.lit !== r.plain && r.whole && r.inside
+            !errors.length && r.n === 1 && r.hd === 'الصلاة القادمة' && r.text === (digits === 'latin' ? toLatin(want) : want) && r.lit !== r.plain && r.left[0] === r.plain && r.left[1] === r.left[2] && r.whole && r.inside
             && r.h <= r.font * 3.2, JSON.stringify(r) + errors.join('; '));
           await ctx.close();
         }
