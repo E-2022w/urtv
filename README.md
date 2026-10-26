@@ -132,8 +132,9 @@ Everything is scriptable over ADB, made for slow Wi-Fi (retries, resumable uploa
 | `optimize/precheck.sh` | is it an Android TV (leanback; Samsung Tizen, LG webOS, phones are refused) and is its WebView 80 or newer · `webview-store` opens the update page on the TV |
 | `optimize/run.sh` | the whole setup; run again after any failure to continue · `status` · `again` after a TV system update (redo all, settings kept) |
 | `docs/FEATURES.md` | كل ميزة بالعربي: وش تسوي، ووين تغيّرها، ووش يكتب الوكيل |
+| `AGENTS.md` | for AI agents, read first: where to start and the rules agents broke in reports |
 | `docs/SETTINGS.md` | every setting and feature with its command, for agents: use these, never build your own |
-| `optimize/saver.sh` | screensaver settings: `show`, `cities`, `city`, `find-team`, `teams`, `leagues`, `card`, `home-card`, `greeting`, `events`, `genres`, `langs`, `minrating`, `photos`, `idle`, `digits`, `national`, `cardstyle`, `markets`, `mkstyle`, `stocks`, `slot`, `countdown`, `tasks`, `update` |
+| `optimize/saver.sh` | screensaver settings: `show`, `cities`, `city`, `find-team`, `teams`, `leagues`, `card`, `home-card`, `greeting`, `events`, `genres`, `langs`, `minrating`, `photos`, `idle`, `digits`, `hijrioffset`, `clock24`, `national`, `cardstyle`, `markets` (`off`/`on`), `clocksize`, `mkstyle`, `stocks`, `slot`, `countdown`, `tasks`, `export` / `import` (move the settings to a second TV, `import` previews until `--yes`), `update` |
 | `optimize/photos.sh` | the owner's own photos, 1 to 10: `add FILE...`, `list`, `del N`, `clear`, `mode mix\|only`, `show` |
 | `optimize/dock.sh` | favourites row: `show`, `apps`, `set`, `reset`; `hidden`, `hide PKG`, `show PKG` for apps left off the home screen |
 | `optimize/music.sh` | «تلاوة وأذان» over ADB: `status`, `reciters`, `stations`, `surah`, `radio`, `pause`, `resume`, `seek`, `sleep`, `adhan` (`now`, `on`/`off`, `voice N`) |
@@ -143,7 +144,7 @@ Everything is scriptable over ADB, made for slow Wi-Fi (retries, resumable uploa
 | `optimize/keep.sh` | turn back on anything protected (AirPlay, casting, voice, updates…) that something turned off · `off`: what the setup turned off, by name · `restore <pkg>`: an app the person wants back, remembered so `run.sh again` leaves it on |
 | `docs/TVS.md` | what was seen on each TV model (ADB port, home switch, what to watch out for) |
 | `optimize/reset.sh` | back to stock: lists re-enabled, stock home and screensaver back, our apps removed |
-| `optimize/share.sh` | if the owner wants: `--preview` writes how the setup went and prints exactly what would be sent, `--send` sends it: TV model, time per step, what failed, memory before/after, nothing personal; anonymous to the author (from their phone by a QR code if this computer is offline) |
+| `optimize/share.sh` | if the owner wants: `--preview` writes how the setup went and prints exactly what would be sent, `--send` sends it: TV model, time per step, what failed, memory before/after, nothing personal; anonymous to the author (from their phone by a QR code if this computer is offline). `--problem`: a problem report any time, even from another computer; agents report problems this way, never as GitHub issues |
 
 What we learned on real TCL sets, and what must stay on: [docs/OPTIMIZE.md](docs/OPTIMIZE.md). Manual test plan:
 [docs/TEST-PLAN.md](docs/TEST-PLAN.md).
@@ -166,8 +167,9 @@ docs/                 the agent prompts (setup, recreate), what we learned on re
 tests/run.sh          every check: build, data, fonts, scripts, private data, «تلاوة» and the adhan, flaky-ADB upload, the screen in a browser
 ```
 
-A push to `master` builds both APKs in GitHub Actions and publishes them to `apk-latest` and a numbered `v3.N`
-release; a push to `next` publishes `apk-next` instead (a test build). `tests/run.sh` runs on `master`, `next`,
+A push to `master` builds both APKs in GitHub Actions, once `tests/run.sh` has passed in the same run, and publishes them
+to `apk-latest` (with a `version.txt`, the number the settings screen shows as the newest) and a numbered `v3.N`
+release; a push to `next` publishes `apk-next` instead (a test build, no wait for the checks). `tests/run.sh` runs on `master`, `next`,
 `content` and pull requests. Local Android build (needs the SDK): `python3 src/build.py && gradle -p android assembleRelease`
 (signed with the debug key; the release key lives only in the repository's secrets).
 
@@ -182,7 +184,7 @@ urtv.html#city=جدة&lat=21.5433&lon=39.1728&tz=Asia/Riyadh&teams=136013,136137
 (`2222,1120,AAPL,NVDA`: 4 digits is a Tadawul code, letters a US ticker). Also `genres`, `langs`, `shows`, `minrating` for the episodes card,
 `digits`: `hindi` (١٢٣, the default) or `latin` (123), `national`: `auto` (default; on National Day, 21–25 September, and Founding Day, 20–24 February, the accent turns Saudi green with a small line under the dates, and the day itself greets «كل عام والوطن بخير») or `off`, and `cardstyle`: the card's look, `current` (default), `dark1`,
 `glass1`, `dark3` or `glass3`. `markets`: up to 4 of `tasi`, `aramco`, `spx`, `btc`, `gold`, `silver` (per gram, in riyals),
-`xrp`, in order (default `tasi,spx,btc`); `mkstyle`: `arrows` (a ▲/▼ only, the default) or `prices` (the price, the day's change and
+`xrp`, in order (default `tasi,spx,btc`; `mkbar=off` hides the line and asks for nothing for it); `clocksize`: `large` (default), `medium` or `small`; `mkstyle`: `arrows` (a ▲/▼ only, the default) or `prices` (the price, the day's change and
 the time of the last update).
 `tasks`: the open «المهام», one per line, URL-encoded.
 
@@ -224,7 +226,7 @@ once even when both follow it; the slot pages two a time (every 15 s, 10 s once 
 league's own file is read, so a club that is in two leagues (Abha: the Pro League and Division 1) shows only in the one it plays in this season.
 A game is always one line: when two long names do not fit side by side the pair goes one to a page.
 
-**Data** (free, no keys): Aladhan (prayer times, Umm al-Qura), Open-Meteo (weather), Yahoo and CoinGecko (markets),
+**Data** (free, no keys): Aladhan (prayer times: the city's country's method, Umm al-Qura for Saudi Arabia), Open-Meteo (weather), Yahoo and CoinGecko (markets),
 TVMaze (episodes), TheSportsDB (matches). Everything fails soft: offline, the clock, dates, prayer and Ramadan
 countdowns still work and the last good data stays on screen. A finished game's score stays up for a day.
 
@@ -238,6 +240,10 @@ the windows (morning: Fajr to Dhuhr, evening: Asr to Maghrib).
 
 **The Android apps** check this repo for a new screen page when the screensaver starts, at most every 6 hours (so it must stay public), start fast
 (the page shows once the clock, saved panels and photo are ready), and come back after a power cut.
+
+## More
+
+[SECURITY.md](SECURITY.md) (report a vulnerability) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md)
 
 ## Credits
 

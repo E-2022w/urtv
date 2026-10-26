@@ -14,7 +14,7 @@ One grid with three rows — `grid-template-rows: auto 1fr auto`, stage padding 
 
 **Top row — two ends, nothing in between:**
 - Left: weather and markets set as type, mirroring the date block on the right — no boxes, no pills.
-  - Big line (same size as the Hijri date): the temperature `٣٤°` in the display font, then a short Arabic condition word (`صافي`, `غائم جزئياً`…; `غبار` in gold when PM10 is high).
+  - Big line (same size as the Hijri date): the temperature `٣٤°` in the display font, then a short Arabic condition word (`صافي`, `غائم جزئياً`…; `غبار` in gold beside it, not instead, when PM10 is high; a small «Open-Meteo · قبل ١٥ د» line under the city).
   - Small line (same size as the Gregorian date): the city `·` high / low `٣٧° / ٢٤°`.
   - A short gold hairline starting at the left screen edge and fading toward the middle.
   - Under it, one quiet line: `تاسي ▼ · S&P 500 ▲ · بيتكوين ▲` — the name plus ONE direction marker only, `▲` `#79D6A0`, `▼` `#EE8B70`. No price, no percentage. If a quote cannot be loaded, hide its marker (never a dash, never a hard-coded direction).
@@ -52,7 +52,7 @@ All three are built identically — small gold label, big value, small sub-line 
 
 ## Data (all free, no API keys)
 
-- **Prayer times** — Aladhan, method 4 (Umm al-Qura):
+- **Prayer times** — Aladhan, method 4 (Umm al-Qura; 9 Kuwait, 10 Qatar, 16 the UAE, 8 Bahrain and Oman, 0 Ja'fari — chosen by the city's zone, see docs/SETTINGS.md):
   `https://api.aladhan.com/v1/timings/DD-MM-YYYY?latitude=24.7136&longitude=46.6753&method=4&timezonestring=Asia/Riyadh`
   Only Fajr, Dhuhr, Asr, Maghrib, Isha. Refresh every 6 hours; recompute the countdown every second.
 - **Ramadan** — never hard-code the date: walk forward day by day with

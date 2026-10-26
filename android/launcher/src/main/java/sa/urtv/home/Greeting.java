@@ -60,8 +60,8 @@ final class Greeting {
         long at = sp.getLong("at", 0);
         boolean sameCity = s.lat.equals(sp.getString("lat", "")) && s.lon.equals(sp.getString("lon", ""));
         if (sameCity && sp.contains("code") && System.currentTimeMillis() - at < STALE_MS && d != null) {
-            String line = GreetingText.weather(sp.getInt("code", -1), sp.getFloat("dust", 0), s.city, sp.getFloat("temp", 0), s.latin)
-                    + "\n" + GreetingText.sun(d.sunLabel, d.sunClock, s.latin);
+            String line = GreetingText.weather(sp.getInt("code", -1), GreetingText.seenDust(sp.getFloat("dust", 0), sp.getFloat("vis", -1)), s.city, sp.getFloat("temp", 0), s.latin)
+                    + "\n" + GreetingText.sun(d.sunLabel, d.sunClock, s.latin, s.clock24);
             weather.setText(line);
             weather.setVisibility(android.view.View.VISIBLE);
         } else {
@@ -79,7 +79,7 @@ final class Greeting {
         new Thread(() -> {
             try {
                 String url = "https://api.open-meteo.com/v1/forecast?latitude=" + s.lat + "&longitude=" + s.lon
-                        + "&timezone=" + URLEncoder.encode(s.tz, "UTF-8") + "&current=temperature_2m,weather_code";
+                        + "&timezone=" + URLEncoder.encode(s.tz, "UTF-8") + "&current=temperature_2m,weather_code,visibility";
                 HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
                 con.setConnectTimeout(6000);
                 con.setReadTimeout(8000);
@@ -106,6 +106,7 @@ final class Greeting {
                         .putString("lat", s.lat).putString("lon", s.lon)
                         .putFloat("temp", (float) cur.getDouble("temperature_2m"))
                         .putFloat("dust", dust)
+                        .putFloat("vis", (float) cur.optDouble("visibility", -1))
                         .putInt("code", cur.getInt("weather_code")).apply();
                 main.post(() -> { fetching = false; update(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY), ConfigSnapshot.read(context)); });
             } catch (Exception e) {
@@ -145,7 +146,7 @@ final class Greeting {
     private static final class Config {
         boolean on = true;   // an older screensaver does not say: on, the default
         String city = "الرياض", lat = "24.6877", lon = "46.7219", tz = "Asia/Riyadh";
-        boolean latin;
+        boolean latin, clock24;
 
         static Config of(ConfigSnapshot snap) {
             Config s = new Config();
@@ -163,6 +164,7 @@ final class Greeting {
                         case "lon": if (value.matches("-?\\d+(\\.\\d+)?")) s.lon = value; break;
                         case "tz": if (!value.trim().isEmpty()) s.tz = value.trim(); break;
                         case "digits": s.latin = "latin".equals(value.toLowerCase(Locale.ROOT)); break;
+                        case "clock": s.clock24 = ClockText.isOn(value); break;
                         default: break;
                     }
                 }

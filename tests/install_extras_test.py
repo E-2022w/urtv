@@ -18,7 +18,7 @@ case "$1" in
   "getprop ro.product.cpu.abilist") echo "arm64-v8a,armeabi-v7a" ;;
   "pm list packages "*) pkg=${1##* }; grep -qx "$pkg" "$T/installed" 2>/dev/null && echo "package:$pkg" ;;
   "pm install -r /data/local/tmp/tvbro"*) echo com.phlox.tvwebbrowser >> "$T/installed"; echo "install tvbro" >> "$T/log"; echo Success ;;
-  "pm install -r /data/local/tmp/SmartTube"*) echo org.smarttube.stable >> "$T/installed"; echo "install smarttube" >> "$T/log"; echo Success ;;
+  "pm install -r /data/local/tmp/SmartTube"*) [ "$SILENT" = 1 ] && exit 1; echo org.smarttube.stable >> "$T/installed"; echo "install smarttube" >> "$T/log"; echo Success ;;
 esac
 exit 0
 '''
@@ -38,18 +38,19 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ("" if ok else f"  -> {detail}"))
     failed += not ok
 
-def run(installed=(), have=None, fail_push="", tree=None):
+def run(installed=(), have=None, fail_push="", tree=None, silent=""):
     t = Path(tempfile.mkdtemp())
     tree = tree or t / "tree"
     bin_ = t / "bin"; bin_.mkdir(); (tree / "optimize" / "lists").mkdir(parents=True, exist_ok=True)
     shutil.copy(ROOT / "optimize" / "install.sh", tree / "optimize")
+    shutil.copy(ROOT / "optimize" / "home-journal.sh", tree / "optimize")
     for f, body in (("py", STUB_PY), ("curl", STUB_CURL), ("sleep", "#!/bin/sh\nexit 0\n")):
         (bin_ / f).write_text(body); (bin_ / f).chmod(0o755)
     (t / "installed").write_text("".join(p + "\n" for p in installed))
     (t / "log").write_text("")
     for name, size in (have or {}).items():
         (tree / "optimize" / name).write_bytes(b"x" * size)
-    env = dict(os.environ, T=str(t), PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), TVBRO=TVBRO, STUBE=STUBE, FAIL_PUSH=fail_push)
+    env = dict(os.environ, T=str(t), PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), TVBRO=TVBRO, STUBE=STUBE, FAIL_PUSH=fail_push, SILENT=silent)
     r = subprocess.run(["bash", str(tree / "optimize" / "install.sh"), "extras"], env=env, capture_output=True, text=True)
     return r.returncode, r.stdout + r.stderr, (t / "log").read_text().splitlines(), (t / "installed").read_text().split(), tree
 
@@ -67,5 +68,8 @@ check("the next try does not download a finished APK again, uploads and installs
       and f"push {STUBE}" in log and "install smarttube" in log and "already downloaded" in out, f"{rc} {log} {out}")
 rc, out, log, inst, _ = run(installed=["com.phlox.tvwebbrowser"], have={STUBE: 7})
 check("a cut-off download (wrong size) is downloaded again", rc == 0 and f"download {STUBE}" in log, f"{rc} {log} {out}")
+rc, out, log, inst, _ = run(silent="1")
+check("SmartTube: the TV goes silent during its install: skipped with a clear line, the step still ends well, TV Bro stays",
+      rc == 0 and "org.smarttube.stable was skipped" in out and "com.phlox.tvwebbrowser" in inst, f"{rc} {out}")
 print("\nall install-extras checks passed" if not failed else f"\n{failed} failed")
 sys.exit(1 if failed else 0)

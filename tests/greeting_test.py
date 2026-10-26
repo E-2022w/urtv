@@ -17,13 +17,14 @@ with tempfile.TemporaryDirectory() as tmp:
     subprocess.run(["javac", "-encoding", "UTF-8", "-d", tmp,
                     str(ROOT / "android/launcher/src/main/java/sa/urtv/home/GreetingText.java"),
                     str(ROOT / "android/launcher/src/main/java/sa/urtv/home/DigitsText.java"),
+                    str(ROOT / "android/launcher/src/main/java/sa/urtv/home/ClockText.java"),
                     str(ROOT / "tests/GreetingRun.java")], check=True)
     out = subprocess.run(["java", "-Dfile.encoding=UTF-8", "-cp", tmp, "sa.urtv.home.GreetingRun",
                           str(ROOT / "tests/greeting_cases.tsv")], check=True, capture_output=True).stdout
 got = out.decode("utf-8").split("\n")
 failed = 0
 for c, g in zip(cases, got):
-    n = {"part": 6, "weather": 6, "sun": 4}[c[0]]   # the kind and its inputs; then what is expected, then a note
+    n = {"part": 6, "weather": 6, "sun": 4, "seen": 3}[c[0]]   # the kind and its inputs; then what is expected, then a note
     want, note = c[n], c[n + 1]
     ok = g == want
     print(("PASS " if ok else "FAIL ") + f"greeting {c[0]}: {note}" + ("" if ok else f"  -> {g!r}, wanted {want!r}"))

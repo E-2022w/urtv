@@ -45,9 +45,22 @@ public final class NowPlaying {
         int minutes = until > 0 ? (int) Math.max(1, (until - System.currentTimeMillis() + 59_999) / 60_000) : 0;
         return new State(true, MusicService.isPlaying(), radio,
                 NowPlayingText.title(radio, cat.surahName(MusicService.currentSurah()), stationName),
-                NowPlayingText.sub(radio, reciterName, minutes), NowPlayingText.hint(radio),
+                NowPlayingText.sub(radio, reciterName, minutes, NowPlayingText.note(MusicService.currentError(), MusicService.isBuffering())),
+                NowPlayingText.hint(radio),
                 NowPlayingText.who(radio, reciterName));
     }
+
+    /** an adhan for a prayer is playing (not a preview, not a surah): the home's bar says so and how to stop it */
+    public static boolean adhanLive() { return MusicService.adhanLive(); }
+
+    /** PrayerTimes' number of the prayer that adhan is for, -1 when none is named */
+    public static int adhanPrayer() { return MusicService.adhanPrayer(); }
+
+    /** «إيقاف الأذان بأي زر» */
+    public static boolean adhanStopKey(Context c) { return new Prefs(c).adhanStopKey(); }
+
+    /** Ends the adhan that is playing, and only that adhan: the next prayer's alarm is untouched. */
+    public static void stopAdhan(Context c) { MusicService.stopAdhan(c); }
 
     public static void toggle(Context c) { MusicService.toggle(c); }
 

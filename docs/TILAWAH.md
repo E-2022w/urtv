@@ -52,7 +52,7 @@ Package `sa.urtv.home` · classes `sa.urtv.home.tilawah` · label «تلاوة»
 | Key | Action |
 |---|---|
 | OK / Enter | play / pause (in the lists: open / choose) |
-| ◀ / ▶ | seek −10 s / +10 s (switches the section on the تلاوة screen) |
+| ◀ / ▶ | seek −10 s / +10 s (switches the section on the تلاوة screen); held, one step of 10 s every 250 ms, never faster (the service also drops any burst closer than 100 ms) |
 | ▼ | sleep timer (30, 60 or 90 minutes; off; stop now) |
 | Back | back to the list — playback continues |
 | media play/pause, next, previous | work through the media session |
@@ -81,7 +81,7 @@ right and the left arrow to the left.
 
 ## The adhan
 
-- **The times** are Umm al-Qura, computed on the TV with no network: Fajr at 18.5°, Maghrib at
+- **The times** are the calculation of the city's country (Umm al-Qura for Saudi Arabia and anywhere outside the Gulf; Kuwait, Qatar, the UAE, Bahrain and Oman each their own; the Shia Ja'fari one when «طريقة الحساب» says so: `docs/SETTINGS.md`), computed on the TV with no network. For Umm al-Qura: Fajr at 18.5°, Maghrib at
   sunset, Asr at shadow factor 1, Isha 90 minutes after Maghrib (120 in Ramadan, from the
   Umm al-Qura calendar) — an absolute moment, so a Maghrib near midnight at a high latitude gives an Isha after midnight,
   never an hour that has already gone. This is the same arithmetic as the screensaver's page and the same method
@@ -140,7 +140,11 @@ optimize/music.sh sleep 30                 # 0 cancels
 optimize/music.sh adhan                    # on/off, voice, next time, last played
 optimize/music.sh adhan now 3              # play voice 3 right now
 optimize/music.sh adhan off | on
-optimize/music.sh adhan voice 7            # the recording used at the prayer times
+optimize/music.sh adhan voice 7            # the recording used at Dhuhr, Asr, Maghrib and Isha (not the Fajr ones: 10 13 17 20)
+optimize/music.sh adhan fajr-voice 10      # «مؤذن الفجر»: Fajr's own muezzin (default 10)
+optimize/music.sh adhan short on|off       # «أذان مختصر»: stops after the first minute, 3-second fade
+optimize/music.sh adhan stopkey on|off     # «إيقاف الأذان بأي زر»: ON by default, any key stops the adhan (volume keys and Power excepted); off: only OK on the adhan bar
+optimize/music.sh adhan stop               # stop the adhan that is playing
 optimize/music.sh adhan volume 60          # its own volume, 10-100
 optimize/music.sh adhan add my-adhan.mp3   # the person's own recording (ffmpeg here makes it small); `adhan voice own`, `adhan own-clear`
 ```
@@ -210,7 +214,7 @@ CI builds the home app with the screensaver, renames it to `urtv-home.apk`, and 
 
 - Live streams depend on third parties; a station can be down, move, or be blocked on some networks.
 - No downloads/offline mode for surahs, by design (the adhan recordings are cached).
-- The adhan times are Umm al-Qura; a TV outside Saudi Arabia gets that method for its own
-  coordinates, which is the project's choice, not a local authority's calendar.
+- The adhan times are a calculation (the country's, by the city's time zone), not a local authority's printed
+  calendar: Umm al-Qura for a place outside the Gulf, which is the project's choice. `تعديل وقت الصلاة` moves them to a mosque's minutes.
 - The UI is Arabic/RTL; the transport buttons are intentionally LTR so the previous/next arrows match
   every other player.

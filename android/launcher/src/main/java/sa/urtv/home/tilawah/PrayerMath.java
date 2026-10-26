@@ -19,8 +19,92 @@ final class PrayerMath {
 
     private PrayerMath() {}
 
+    /**
+     * A calculation, named by the id Aladhan gives it (the page and the online times ask Aladhan for the same one). Fajr and Isha are
+     * angles below the horizon, or Isha is a fixed delay after Maghrib; the tune moves sunrise, Dhuhr, Asr and Maghrib by whole minutes
+     * (the safety margins some authorities publish). Sources: Aladhan's list (aladhan.com/calculation-methods, api.aladhan.com/v1/methods)
+     * and, for the Dubai margins, the Batoul Apps adhan library's METHODS.md:
+     *   0  Shia Ithna-Ashari, Leva Institute, Qum: Fajr 16°, Isha 14°, Maghrib when the sun is 4° below the horizon
+     *   4  Umm al-Qura (Saudi Arabia, and the default everywhere else, as ever): Fajr 18.5°, Isha 90 minutes after Maghrib, 120 in Ramadan
+     *   8  Gulf Region (Bahrain, Oman): Fajr 19.5°, Isha 90 minutes after Maghrib
+     *   9  Kuwait: Fajr 18°, Isha 17.5°
+     *  10  Qatar: Fajr 18°, Isha 90 minutes after Maghrib
+     *  16  Dubai (the UAE's General Authority of Islamic Affairs): Fajr 18.2°, Isha 18.2°, sunrise −3, Dhuhr, Asr and Maghrib +3 minutes
+     *   5  Egypt, the Egyptian General Authority of Survey: Fajr 19.5°, Isha 17.5° (praytimes.org/docs/methods and the ITL library's
+     *      method-info list the same angles; Aladhan's id 5 is this authority). Syria, Lebanon and Palestine (Asia/Damascus, Asia/Beirut,
+     *      Asia/Gaza, Asia/Hebron) get this one too: Aladhan has no method of their own, none of their religious authorities publishes
+     *      angles that Aladhan carries, and praytimes.org names the Egyptian method for Syria and Lebanon, so it is the closest honest choice
+     *  23  Jordan, the Ministry of Awqaf, Islamic Affairs and Holy Places: Fajr 18°, Isha 18°, Maghrib 5 minutes after sunset (the idea
+     *      and the figures of pull request 34; Aladhan's id 23)
+     *  21  Morocco, the Ministry of Habous and Islamic Affairs: Fajr 19°, Isha 17°, Dhuhr and Maghrib +5 minutes (Aladhan's id 21; angles and margins as the ITL
+     *      library's method-info lists the Moroccan Awqaf ministry)
+     *  19  Algeria, the Ministry of Religious Affairs and Awqaf: Fajr 18°, Isha 17° (Aladhan's id 19; the angles salahtimes.com and Aladhan's list give)
+     *  18  Tunisia, the Ministry of Religious Affairs: Fajr 18°, Isha 18° (Aladhan's id 18; salahtimes.com lists the ministry's method with these angles)
+     * Asr is the shadow-length-one (Shafi'i) Asr for all of them; Maghrib is sunset (0.833°) except for the Ja'fari.
+     */
+    static final class Method {
+        final int id;
+        final double fajr, isha, maghrib;
+        final int ishaMinutes;
+        final int[] tune;   // sunrise, Dhuhr, Asr, Maghrib
+        Method(int id, double fajr, double isha, int ishaMinutes, double maghrib, int... tune) {
+            this.id = id; this.fajr = fajr; this.isha = isha; this.ishaMinutes = ishaMinutes; this.maghrib = maghrib;
+            this.tune = tune.length == 4 ? tune : new int[4];
+        }
+        /** Isha is the delay after Maghrib (so Aladhan's Isha need not be kept); false: an angle, Aladhan's Isha is kept too */
+        boolean ishaIsDelay() { return ishaMinutes > 0; }
+    }
+
+    static final int JAFARI = 0, UMM_AL_QURA = 4, GULF = 8, KUWAIT = 9, QATAR = 10, DUBAI = 16, EGYPT = 5, JORDAN = 23, MOROCCO = 21, ALGERIA = 19, TUNISIA = 18;
+    private static final Method[] METHODS = {
+        new Method(JAFARI, 16, 14, 0, 4),
+        new Method(UMM_AL_QURA, 18.5, 0, 90, .833),
+        new Method(GULF, 19.5, 0, 90, .833),
+        new Method(KUWAIT, 18, 17.5, 0, .833),
+        new Method(QATAR, 18, 0, 90, .833),
+        new Method(DUBAI, 18.2, 18.2, 0, .833, -3, 3, 3, 3),
+        new Method(EGYPT, 19.5, 17.5, 0, .833),
+        new Method(JORDAN, 18, 18, 0, .833, 0, 0, 0, 5),
+        new Method(MOROCCO, 19, 17, 0, .833, 0, 5, 0, 5),
+        new Method(ALGERIA, 18, 17, 0, .833),
+        new Method(TUNISIA, 18, 18, 0, .833),
+    };
+
+    static Method method(int id) {
+        for (Method m : METHODS) if (m.id == id) return m;
+        return METHODS[1];
+    }
+
+    /**
+     * The method of a place: the Ja'fari when the settings say {@code pm=jafari}, else the country's own, told by the city's time zone
+     * (Kuwait, Qatar, UAE; Bahrain and Oman the Gulf one), else Umm al-Qura. The page (CONFIG.prayerMethod) and the app (PrayerMethod) say
+     * the same; tests/prayer_method_test.py compares the three.
+     */
+    static int methodFor(String tz, String pm) {
+        if ("jafari".equals(pm)) return JAFARI;
+        if (tz == null) return UMM_AL_QURA;
+        switch (tz) {
+            case "Asia/Kuwait": return KUWAIT;
+            case "Asia/Qatar": return QATAR;
+            case "Asia/Dubai": return DUBAI;
+            case "Asia/Bahrain": case "Asia/Muscat": return GULF;
+            case "Africa/Cairo": case "Asia/Damascus": case "Asia/Beirut": case "Asia/Gaza": case "Asia/Hebron": case "Asia/Jerusalem": return EGYPT;
+            case "Asia/Amman": return JORDAN;
+            case "Africa/Casablanca": case "Africa/El_Aaiun": return MOROCCO;
+            case "Africa/Algiers": return ALGERIA;
+            case "Africa/Tunis": return TUNISIA;
+            default: return UMM_AL_QURA;
+        }
+    }
+
     /** Isha comes this long after Maghrib (Umm al-Qura): 90 minutes, 120 in Ramadan. */
-    static long ishaDelayMillis(boolean ramadan) { return (ramadan ? 120 : 90) * 60_000L; }
+    static long ishaDelayMillis(boolean ramadan) { return ishaDelayMillis(ramadan, UMM_AL_QURA); }
+
+    /** The same for a method with a delay: the Ramadan half hour is Umm al-Qura's alone. */
+    static long ishaDelayMillis(boolean ramadan, int methodId) {
+        Method m = method(methodId);
+        return (m.ishaMinutes + (ramadan && m.id == UMM_AL_QURA ? 30 : 0)) * 60_000L;
+    }
 
     /** Local midnight of that day in that zone. */
     static long midnight(int y, int mo, int d, String tz) {
@@ -30,12 +114,26 @@ final class PrayerMath {
         return c.getTimeInMillis();
     }
 
-    /**
-     * The six times of that local day (Fajr, sunrise, Dhuhr, Asr, Maghrib, Isha) as moments. Isha is an absolute
-     * time, Maghrib plus its delay: at a high latitude, where Maghrib is late, it falls after midnight, on the next
-     * day, instead of wrapping back to an hour of this day that has already gone.
-     */
+    /** The moment a wall clock of that day reads {@code minutes} after midnight in that zone: 24*60+10 is 00:10 of the next day. */
+    static long wall(int y, int mo, int d, int minutes, String tz) {
+        Calendar c = Calendar.getInstance(TimeZone.getTimeZone(tz), Locale.US);
+        c.clear();
+        c.set(y, mo - 1, d, minutes / 60, minutes % 60, 0);   // lenient: past 24:00 rolls into the next day; a clock that does not exist (the hour skipped) reads an hour later
+        return c.getTimeInMillis();
+    }
+
     static long[] compute(int y, int mo, int d, double lat, double lng, String tz, boolean ramadan) {
+        return compute(y, mo, d, lat, lng, tz, ramadan, UMM_AL_QURA);
+    }
+
+    /**
+     * The six times of that local day (Fajr, sunrise, Dhuhr, Asr, Maghrib, Isha) as moments. The sun gives each as a clock reading of the
+     * city's day, and the moment is that clock reading in the city's zone (wall()), so a day when the clocks change (8 March, 1 November
+     * in New York) puts every time where the clock says, not an hour off. Isha is an absolute time: at a high latitude, where Maghrib is
+     * late, it falls after midnight, on the next day, instead of wrapping back to an hour of this day that has already gone.
+     */
+    static long[] compute(int y, int mo, int d, double lat, double lng, String tz, boolean ramadan, int methodId) {
+        Method m = method(methodId);
         TimeZone zone = TimeZone.getTimeZone(tz);
         long day0 = midnight(y, mo, d, tz);
         Calendar utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.US);
@@ -44,25 +142,51 @@ final class PrayerMath {
         double jd0 = utc.getTimeInMillis() / 86400000.0 + 2440587.5 - lng / 360.0;
         double tzHours = zone.getOffset(day0 + 12 * 3600_000L) / 3600000.0;
 
-        double fajr = adj(angleTime(jd0, lat, 18.5, 5, true), tzHours, lng);
+        double fajr = adj(angleTime(jd0, lat, m.fajr, 5, true), tzHours, lng);
         double sunrise = adj(angleTime(jd0, lat, .833, 6, true), tzHours, lng);
         double dhuhr = adj(noon(jd0, 12), tzHours, lng);
         double asr = adj(asrTime(jd0, lat, 13), tzHours, lng);
-        double maghrib = adj(angleTime(jd0, lat, .833, 18, false), tzHours, lng);
+        double maghrib = adj(angleTime(jd0, lat, m.maghrib, 18, false), tzHours, lng);
 
+        int[] minutes = new int[6];
+        minutes[FAJR] = minutesOfDay(fajr);
+        minutes[SUNRISE] = minutesOfDay(sunrise) + m.tune[0];
+        minutes[DHUHR] = minutesOfDay(dhuhr) + m.tune[1];
+        minutes[ASR] = minutesOfDay(asr) + m.tune[2];
+        minutes[MAGHRIB] = minutesOfDay(maghrib) + m.tune[3];
+        if (m.ishaIsDelay()) {
+            minutes[ISHA] = minutes[MAGHRIB] + (int) (ishaDelayMillis(ramadan, m.id) / 60_000L);
+        } else {
+            double isha = adj(angleTime(jd0, lat, m.isha, 18, false), tzHours, lng);
+            minutes[ISHA] = Math.max(minutes[MAGHRIB], (int) Math.round(isha * 60));   // absolute, like the delay: never wrapped to the morning
+        }
         long[] at = new long[6];
-        at[FAJR] = day0 + minutesOfDay(fajr) * 60_000L;
-        at[SUNRISE] = day0 + minutesOfDay(sunrise) * 60_000L;
-        at[DHUHR] = day0 + minutesOfDay(dhuhr) * 60_000L;
-        at[ASR] = day0 + minutesOfDay(asr) * 60_000L;
-        at[MAGHRIB] = day0 + minutesOfDay(maghrib) * 60_000L;
-        at[ISHA] = at[MAGHRIB] + ishaDelayMillis(ramadan);
+        for (int i = 0; i < 6; i++) at[i] = wall(y, mo, d, minutes[i], tz);
         return at;
     }
 
+    /**
+     * The first of those prayers (indexes into {@code at}, in the order they come) that is later than {@code after}, or −1. The screen's
+     * «next prayer» asks with now + 30 seconds (a prayer 20 seconds away is already «الآن» to look at); the adhan alarm asks with now alone, so
+     * a refresh just before a prayer cannot move the alarm on to the one after it.
+     */
+    static int firstAfter(long[] at, int[] order, long after) {
+        for (int i : order) if (at[i] > after) return i;
+        return -1;
+    }
+
+    /** What the adhan alarm was set for, to tell when it must be set again: the place, its zone, the minutes added and the method. */
+    static String identity(double lat, double lng, String tz, String adjustments, int methodId) {
+        return String.format(Locale.US, "%.4f,%.4f|%s|%s|%d", lat, lng, tz, adjustments, methodId);
+    }
+
     /** The preference key of the day's times: the date in the city's zone and the city itself, so a new city refetches. */
-    static String key(long millis, double lat, double lng, String tz) {
-        return "times_" + format("yyyyMMdd", millis, tz) + "_" + String.format(Locale.US, "%.3f_%.3f", lat, lng) + "_" + tz;
+    static String key(long millis, double lat, double lng, String tz) { return key(millis, lat, lng, tz, UMM_AL_QURA); }
+
+    /** The same for a method: another method the same day is another copy (Umm al-Qura's key is as it always was). */
+    static String key(long millis, double lat, double lng, String tz, int methodId) {
+        return "times_" + format("yyyyMMdd", millis, tz) + "_" + String.format(Locale.US, "%.3f_%.3f", lat, lng) + "_" + tz
+                + (methodId == UMM_AL_QURA ? "" : "_m" + methodId);
     }
 
     /** The date Aladhan is asked for: the city's own day, not the TV's. */

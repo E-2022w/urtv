@@ -531,8 +531,8 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   await p.waitForTimeout(800);
   await p.evaluate(() => {
     document.getElementById('wx-temp').textContent = '٣٨°';
-    document.getElementById('wx-desc').textContent = 'غبار';
-    document.getElementById('wx-desc').classList.add('dust');
+    document.getElementById('wx-desc').textContent = 'صافي';
+    document.getElementById('wx-dust').textContent = 'غبار';
     paintDir(TICKERS[0], true);
     document.getElementById('match-row').innerHTML = '<div class="saved-match">SAVED</div>';
     WX.at = Date.now(); saveWx();   // (a reading fetched a moment ago: older than 3 hours it would not be shown)
@@ -542,10 +542,10 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   await p.waitForTimeout(1500);
   const r = await p.evaluate(() => ({
     temp: document.getElementById('wx-temp').textContent,
-    dust: document.getElementById('wx-desc').classList.contains('dust'),
+    dust: document.getElementById('wx-desc').textContent + '+' + document.getElementById('wx-dust').textContent,
     arrow: document.getElementById('tasi-chg').textContent,
     row: document.getElementById('match-row').textContent.trim() }));
-  check('offline start: weather, arrow and match row kept', r.temp === '٣٨°' && r.dust && r.arrow === '▲' && r.row === 'SAVED', JSON.stringify(r));
+  check('offline start: weather, arrow and match row kept', r.temp === '٣٨°' && r.dust === 'صافي+غبار' && r.arrow === '▲' && r.row === 'SAVED', JSON.stringify(r));
   await ctx.close();
 }
 
@@ -736,7 +736,9 @@ const stkRows = p => p.evaluate(() => ({ hd: document.getElementById('week-hd').
   check('stocks: a day line from the intraday closes', r.rows[0].pts === 20 && r.rows[1].pts === 20, JSON.stringify(r.rows.map(x => x.pts)));
   check('stocks: asked as 15-minute bars of one day; codes get .SR', seen.some(s => s === '2222.SR?interval=15m&range=1d') && seen.some(s => s.startsWith('AAPL?')) && !seen.some(s => s.startsWith('2222?')), seen.join(' '));
   check('stocks: market open for Tadawul, US row marked closed (the header says nothing)', r.hd === 'الأسهم' && r.rows[2].closed && !r.rows[0].closed, JSON.stringify(r.rows.map(x => x.closed)));
-  await p.evaluate(at('2026-10-23T09:00:00Z'));          // Friday noon: both closed
+  // Friday 08:00 in Riyadh: both closed. Within 24 hours of the Thursday 08:00 above, so prices fetched after that moment was set (the
+  // first load can land either side of it) are not yet «غير محدّث»
+  await p.evaluate(at('2026-10-23T05:00:00Z'));
   await p.evaluate('renderPanel(false)');
   r = await stkRows(p);
   check('stocks: «السوق مغلق» in the header when every market is closed, last close still shown', r.hd === 'الأسهم' + 'السوق مغلق' && r.rows[0].px === '٢٦٫٣٠' && !r.rows.some(x => x.closed), JSON.stringify(r));
@@ -1258,14 +1260,74 @@ for (const [width, height] of [[461, 250], [1920, 1080], [1280, 720], [960, 540]
   check(`${tag}: after a restart the crests are back at once, from the saved copy`, back === 3 && seen.length === 3, back + ' ' + seen.length);
   await ctx.close();
 }
-{   // the screensaver itself, and every other card, show no crest
+{   // the screensaver uses the same available crests, and keeps the name if one is missing
   const seen = [];
   const { p, ctx, errors } = await open('tv.html', 'teams=136013&panel=matches', { net: crestNet(seen) });
-  await p.evaluate(CREST_GAMES(SHORT_GAMES) + ' renderPanel(false); loadCrests();');
+  await p.evaluate(CREST_GAMES(SHORT_GAMES) + ' renderPanel(false);');
+  await p.evaluate(() => loadCrests());
   await p.waitForTimeout(200);
-  check('the screensaver shows no crest and asks for none', !errors.length && seen.length === 0
-    && await p.evaluate(() => !document.querySelector('img.cr')), seen.join());
+  const r = await p.evaluate(() => {
+    const imgs = [...document.querySelectorAll('#week-list img.cr')];
+    const rows = [...document.querySelectorAll('#week-list li > span:first-child')];
+    const guestWithoutBadge = rows[1].querySelectorAll('.tm')[1];
+    return { count: imgs.length, loaded: imgs.every(i => i.src.startsWith('data:image/png') && i.naturalWidth > 0 && i.naturalWidth <= 48),
+      missingName: guestWithoutBadge.querySelector('img') === null && guestWithoutBadge.textContent.trim().length > 2 };
+  });
+  check('the screensaver shows available crests and keeps the name without a badge', !errors.length && seen.length === 3
+    && r.count === 3 && r.loaded && r.missingName, JSON.stringify({ requests: seen.length, ...r }));
   await ctx.close();
+}
+{   // a club with no crest beside clubs that have one keeps a crest-wide empty space, so the rows line up; a card with no crest at all is as it was
+  const NO_CRESTS = [['Al-Hilal', 'Al-Nassr', false, false], ['Al-Ahli', 'Al-Ittihad', false, false]];
+  for (const [label, query, width, height] of [['screensaver', 'teams=136013&panel=matches', 1280, 720], ['launcher card', 'teams=136013&panel=matches&widget=1', 1280, 720],
+                                              ['launcher card 960x540', 'teams=136013&panel=matches&widget=1', 960, 540]]) {
+    const { p, ctx, errors } = await open('tv.html', query, { width, height, net: crestNet([]) });
+    await p.evaluate(CREST_GAMES(SHORT_GAMES) + ' renderPanel(false); loadCrests();');
+    await p.waitForTimeout(250);
+    const r = await p.evaluate(() => {
+      const gaps = [...document.querySelectorAll('#week-list .crgap')], cr = document.querySelector('#week-list img.cr');
+      const g = gaps[0], tm = g && g.closest('.tm'), nm = tm && tm.querySelector('.nm');
+      return { gaps: gaps.length, imgs: document.querySelectorAll('#week-list img.cr').length,
+        same: !!g && !!cr && Math.abs(g.getBoundingClientRect().width - cr.getBoundingClientRect().width) < 1.5 && g.getBoundingClientRect().width > 8,
+        beforeName: !!g && g.nextElementSibling === nm };
+    });
+    check(`${label}: a club with no crest among clubs that have one gets a crest-wide empty space before its name, and no picture`,
+      !errors.length && r.gaps === 1 && r.imgs === 3 && r.same && r.beforeName, JSON.stringify(r));
+    await ctx.close();
+    const none = await open('tv.html', query, { width, height, net: crestNet([]) });
+    await none.p.evaluate(CREST_GAMES(NO_CRESTS) + ' renderPanel(false); loadCrests();');
+    await none.p.waitForTimeout(150);
+    const z = await none.p.evaluate(() => ({ gaps: document.querySelectorAll('#week-list .crgap').length, imgs: document.querySelectorAll('#week-list img.cr').length,
+      html: document.getElementById('week-list').innerHTML.includes('crgap') }));
+    check(`${label}: a card with no crest at all has no empty space (as before)`, !none.errors.length && z.gaps === 0 && z.imgs === 0 && !z.html, JSON.stringify(z));
+    await none.ctx.close();
+  }
+}
+const LONGER_GAMES = [['Manchester United', 'Borussia Monchengladbach', true, true], ['Al-Hilal', 'Al-Nassr', true, true]];   // one long row, one that always fits
+{   // fitting a game row: crests go first (that row only) and the full names stay; short names only when even that does not fit
+  for (const [width, height] of [[1920, 1080], [960, 540], [461, 250]]) {
+    const tag = `launcher matches card ${width}x${height}`;
+    const read = async games => {
+      const { p, ctx, errors } = await open('tv.html', 'teams=136013&panel=matches&widget=1', { width, height, net: crestNet([]) });
+      await p.evaluate(CREST_GAMES(games) + ' renderPanel(false); loadCrests();');
+      await p.waitForTimeout(300);
+      const rows = await p.evaluate(() => [...document.querySelectorAll('#week-list li.mg > .mr')].map(row => {
+        const nms = [...row.querySelectorAll('.nm')], vis = e => getComputedStyle(e).display !== 'none';
+        return { nocr: row.classList.contains('nocr'), crests: [...row.querySelectorAll('img.cr')].filter(vis).length,
+          gaps: [...row.querySelectorAll('.crgap')].filter(vis).length,
+          shortened: nms.some(n => n.dataset.full !== undefined && n.textContent !== n.dataset.full), fits: fits(row) };
+      }));
+      await ctx.close();
+      return { rows, errors };
+    };
+    const long = await read(LONGER_GAMES), short = await read(SHORT_GAMES);
+    const order = long.rows.every(r => !(r.shortened && !r.nocr) && !(r.nocr && (r.crests || r.gaps)) && r.fits);
+    check(`${tag}: a row that does not fit with its crests loses them (the row beside it keeps its own) and keeps the full names; a name is shortened only after that (no crest or gap left on such a row)`,
+      !long.errors.length && long.rows.length === 2 && order && long.rows[1].crests >= 1 && !long.rows[1].nocr, JSON.stringify(long.rows));
+    check(`${tag}: a row that fits with its crests keeps them, with the full names`,
+      !short.errors.length && short.rows.length === 2 && short.rows.every(r => !r.nocr && !r.shortened && r.crests >= 1 && r.fits), JSON.stringify(short.rows));
+    console.log(`  (${tag}: long and short row: ${long.rows.map(r => r.nocr ? (r.shortened ? 'no crests, short names' : 'no crests, full names') : 'with crests').join(' | ')})`);
+  }
 }
 for (const [width, height] of [[461, 250], [1920, 1080], [1280, 720], [960, 540]]) {
   for (const digits of ['hindi', 'latin']) {
@@ -1486,14 +1548,14 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   const FRAG = 'city=%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6&lat=24.7136&lon=46.6753&tz=Asia%2FRiyadh&teams=&events=&leagues=&panel=prayers&week=1&genres=&langs=&shows=&minrating=0&photos=30&digits=hindi&cardstyle=current&adhanbar=1&yearstrip=0&adj=0,0,0,2,0&national=all&markets=tasi,spx,btc&mkstyle=arrows&stocks=&slot=matches&cd=&cdname=';
   for (const [when, label, wantCard, wantPanel, wantBar] of [
       ['2026-10-22T13:40:00Z', '16:40', '٥:٤٧ م', 'المغرب ٥:٤٧ م', ''],
-      ['2026-10-22T14:44:00Z', '17:44, three minutes to the moved adhan', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'الأذان بعد ٣ دقائق'],
-      ['2026-10-22T14:46:00Z', '17:46: the unmoved Maghrib has passed, the moved one has not', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'الأذان بعد ١ دقيقة'],
-      ['2026-10-22T14:50:00Z', '17:50: in the iqama wait (17:47 + 10)', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'الإقامة بعد ٧ دقائق']]) {
+      ['2026-10-22T14:44:00Z', '17:44, three minutes to the moved adhan', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'أذان المغرب بعد ٣ دقائق'],
+      ['2026-10-22T14:46:00Z', '17:46: the unmoved Maghrib has passed, the moved one has not', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'أذان المغرب بعد ١ دقيقة'],
+      ['2026-10-22T14:50:00Z', '17:50: in the iqama wait (17:47 + 10)', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'إقامة المغرب بعد ٧ دقائق']]) {
     for (const [hash, width, height] of [[FRAG, 1920, 1080], [FRAG + '&widget=1', 561, 253]]) {
       const { p, ctx, errors } = await open('tv.html', hash, { width, height });
       await p.clock.setFixedTime(new Date(when));
       await p.evaluate(TIMES + ' renderPanel(false); tickPrayer();');
-      const r = await p.evaluate(() => ({ adj: CONFIG.prayerAdj.join(), maghrib: fmt12(...[PRAYERS.find(x => x.key === 'Maghrib')].map(x => [x.h, x.mi])[0]),
+      const r = await p.evaluate(() => ({ adj: CONFIG.prayerAdj.join(), maghrib: fmtTime(...[PRAYERS.find(x => x.key === 'Maghrib')].map(x => [x.h, x.mi])[0]),
         card: [...document.querySelectorAll('#week-list li')].map(l => l.textContent.replace(/\s+/g, ' ').trim()).find(t => t.startsWith('المغرب')) || '',
         panel: (document.getElementById('prayer-name').textContent + ' ' + document.getElementById('prayer-time').textContent).trim(), bar: adhanBarText() || '' }));
       const tag = `adj on the page, ${label}, ${width}x${height}${hash.includes('widget') ? ' card' : ''}`;
@@ -1549,6 +1611,95 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   {   // before the times arrive: a title, no row, no errors
     const { p, ctx, errors } = await open('tv.html', 'panel=prayerrow&widget=1', { width: 461, height: 250 });
     check('prayer row with no times yet: no errors', !errors.length, errors.join('; '));
+    await ctx.close();
+  }
+}
+
+// ---- the city under the clock, with the calculation's name when it is not Umm al-Qura; and the first-run note (#citynote=1)
+{
+  const MANAMA = 'city=' + encodeURIComponent('المنامة') + '&lat=26.2154&lon=50.5832&tz=Asia/Bahrain';
+  for (const [hash, want, label] of [['', 'بتوقيت الرياض', 'Riyadh, Umm al-Qura: as it always was'], [MANAMA, 'بتوقيت المنامة · حساب الخليج', 'Bahrain'],
+      ['city=' + encodeURIComponent('الدوحة') + '&tz=Asia/Qatar', 'بتوقيت الدوحة · حساب قطر', 'Qatar'],
+      ['city=' + encodeURIComponent('القطيف') + '&pm=jafari', 'بتوقيت القطيف · الحساب الجعفري', 'the Ja\'fari method']]) {
+    const { p, ctx, errors } = await open('tv.html', hash, { width: 1920, height: 1080 });
+    const r = await p.evaluate(() => ({ sub: document.getElementById('clock-sub').textContent, note: !document.getElementById('citynote').hidden }));
+    check(`clock's city line, ${label}: «${want}», no note, no script errors`, !errors.length && r.sub === want && !r.note, JSON.stringify(r) + errors.join('; '));
+    await ctx.close();
+  }
+  for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) for (const clock of ['large', 'small']) {
+    const { p, ctx, errors } = await open('tv.html', `citynote=1&clocksize=${clock}&yearstrip=1`, { width, height });
+    const r = await p.evaluate(() => { const n = document.getElementById('citynote'), b = n.getBoundingClientRect(), w = document.querySelector('.week').getBoundingClientRect();
+      return { text: n.textContent, size: parseFloat(getComputedStyle(n).fontSize), shown: !n.hidden && b.height > 0, lines: Math.round(b.height / parseFloat(getComputedStyle(n).lineHeight || 20)), inside: b.left >= 0 && b.right <= innerWidth && b.bottom <= innerHeight,
+        clear: b.right <= w.left + 1 || b.left >= w.right - 1 || b.bottom <= w.top || b.top >= w.bottom }; });
+    check(`first-run note at ${width}x${height}, clock ${clock}: «المدينة: الرياض. لتغييرها: الإعدادات ثم الموقع» in one line under the city, 14–22 px, clear of the card, no script errors`,
+      !errors.length && r.text === 'المدينة: الرياض. لتغييرها: الإعدادات ثم الموقع' && r.size >= 14 && r.size <= 22 && (width < 1920 || r.size >= 20) && r.shown && r.inside && r.clear, JSON.stringify(r) + errors.join('; '));
+    await ctx.close();
+  }
+  {   // never on the launcher's cards, and it goes after ten minutes
+    const w = await open('tv.html', 'citynote=1&panel=verse&widget=1', { width: 461, height: 250 });
+    check('first-run note: never on the home screen\'s cards', !w.errors.length && await w.p.evaluate(() => document.getElementById('citynote').hidden), w.errors.join('; '));
+    await w.ctx.close();
+    const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    await ctx.route(/^https?:/, r => r.abort());
+    const p = await ctx.newPage(), errors = [];
+    p.on('pageerror', e => errors.push(e.message));
+    await p.clock.install({ time: new Date('2026-10-23T12:00:00Z') });
+    await p.goto(page('tv.html') + '#citynote=1&gap=0');
+    await p.clock.runFor(60 * 1000);
+    const before = await p.evaluate(() => !document.getElementById('citynote').hidden);
+    await p.clock.runFor(9 * 60 * 1000 + 1000);
+    check('first-run note: there for ten minutes, then gone', !errors.length && before && await p.evaluate(() => document.getElementById('citynote').hidden), errors.join('; '));
+    await ctx.close();
+  }
+}
+
+// ---- «الصلاة القادمة» is the home screen's only: on the screensaver its bottom-right panel says the same, so panel=nextprayer is the verse there
+{
+  const { p, ctx, errors } = await open('tv.html', 'panel=nextprayer', { width: 1920, height: 1080 });
+  const r = await p.evaluate(() => ({ kinds: CARDS.map(c => c.kind).join(), np: !!document.querySelector('#week-list li.np') }));
+  check('screensaver panel=nextprayer: the verse instead, no second «الصلاة القادمة», no script errors', !errors.length && r.kinds === 'verse' && !r.np, JSON.stringify(r) + errors.join('; '));
+  await ctx.close();
+}
+// ---- «الصلاة القادمة»: one line, «المغرب ٥:٤٥ م، بعد ١ ساعة و ٥ دقائق» (the panel's and the bar's words), the name lit; every style, three sizes, both digit systems
+{
+  const TIMES = "buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'19:15'});";
+  for (const [when, want, label] of [
+      ['2026-10-22T13:40:00Z', 'المغرب٥:٤٥ م،بعد ١ ساعة و ٥ دقائق', 'Thursday 16:40'],
+      ['2026-10-23T07:00:00Z', 'الجمعة١١:٤٠ ص،بعد ١ ساعة و ٤٠ دقيقة', 'Friday morning: الجمعة'],
+      ['2026-10-22T14:40:00Z', 'المغرب٥:٤٥ م،بعد ٥ دقائق', 'five minutes before Maghrib'],
+      ['2026-10-22T17:10:00Z', 'الفجر٤:٥٠ ص،بعد ٨ ساعات و ٤٠ دقيقة', 'after Isha: tomorrow\'s Fajr']]) {
+    for (const [hash, width, height] of [['home_panel=nextprayer&widget=1', 461, 250], ['panel=nextprayer&widget=1', 436, 300]]) {   // the home card alone; the settings' preview
+      for (const style of label === 'Thursday 16:40' ? ['current', 'dark1', 'glass1', 'dark3', 'glass3'] : ['current']) {
+        for (const digits of label === 'Thursday 16:40' ? ['hindi', 'latin'] : ['hindi']) {
+          const { p, ctx, errors } = await open('tv.html', `${hash}&cardstyle=${style}&digits=${digits}`, { width, height });
+          await p.clock.setFixedTime(new Date(when));
+          await p.evaluate(TIMES + ' renderPanel(false);');
+          const r = await p.evaluate(() => {
+            const li = [...document.querySelectorAll('#week-list li')], card = document.querySelector('.week').getBoundingClientRect(), np = document.querySelector('#week-list li.np');
+            const parts = np ? [...np.children] : [];
+            return { n: li.length, hd: document.getElementById('week-hd').textContent, text: np ? np.textContent : '', lit: np ? getComputedStyle(np.querySelector('b')).color : '',
+              plain: np ? getComputedStyle(np.querySelector('.t')).color : '', left: np ? [getComputedStyle(np.querySelector('.r')).color, getComputedStyle(np.querySelector('.r')).fontSize, getComputedStyle(np.querySelector('.t')).fontSize] : [], whole: parts.every(x => x.getClientRects().length === 1 && x.scrollWidth <= x.clientWidth + 1),
+              inside: parts.every(x => { const b = x.getBoundingClientRect(); return b.left >= card.left - 1 && b.right <= card.right + 1 && b.bottom <= card.bottom + 1; }),
+              h: Math.round(np ? np.getBoundingClientRect().height : 0), font: np ? parseFloat(getComputedStyle(np).fontSize) : 0 };
+          });
+          {   // the screensaver's «الصلاة القادمة» panel (in the page, hidden on the card) says the same time left in the same words
+            const panel = await p.evaluate(() => { tickPrayer(); return document.getElementById('prayer-count')?.textContent || ''; });
+            check(`next prayer ${label} ${width}x${height} ${style} ${digits}: the card's time left is the panel's, word for word`, r.text.endsWith(panel.replace(/^.*?(بعد )/, '$1')) && /بعد/.test(panel), panel + ' | ' + r.text);
+          }
+          const toLatin = x => x.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+          const tag = `next prayer ${label} ${width}x${height}${hash.includes('widget') ? ' card' : ''} ${style} ${digits}`;
+          check(`${tag}: one line «${want}» under «الصلاة القادمة», the name lit, inside the card, no script errors`,
+            !errors.length && r.n === 1 && r.hd === 'الصلاة القادمة' && r.text === (digits === 'latin' ? toLatin(want) : want) && r.lit !== r.plain && r.left[0] === r.plain && r.left[1] === r.left[2] && r.whole && r.inside
+            && r.h <= r.font * 3.2, JSON.stringify(r) + errors.join('; '));
+          await ctx.close();
+        }
+      }
+    }
+  }
+  {   // with nothing put in: the times the page works out itself (offline too), one line, no errors
+    const { p, ctx, errors } = await open('tv.html', 'panel=nextprayer&widget=1', { width: 461, height: 250 });
+    const r = await p.evaluate(() => ({ n: document.querySelectorAll('#week-list li.np').length, empty: !!document.querySelector('#week-list li.empty') }));
+    check('next prayer from the page\'s own times: one line, no errors', !errors.length && r.n === 1 && !r.empty, JSON.stringify(r) + errors.join('; '));
     await ctx.close();
   }
 }
@@ -1701,7 +1852,10 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   const proLeague = clubs.filter(c => c.leagues.includes('Saudi-Arabian Pro League') && !c.leagues.includes('Saudi First Division League'));
   const longest = clubs.filter(c => c.sport === 'Soccer').sort((a, b) => b.ar.length - a.ar.length).slice(0, 4);
   const side = [...proLeague.slice(0, 14), ...longest];   // 18 sides: the 4 longest names make games 3 and 6 the worst case
-  const at = h => new Date(Date.now() + h * 36e5).toISOString().slice(0, 19) + 'Z';
+  // a fixed moment, so the day names in the rows never depend on the day the test runs: a Monday, and the last game (50 h on) is a
+  // Wednesday 8:12, the longest weekday with wide digits, «بعد يومين»
+  const LEAGUE_NOW = new Date('2026-10-26T03:12:00Z');
+  const at = h => new Date(LEAGUE_NOW.getTime() + h * 36e5).toISOString().slice(0, 19) + 'Z';
   // game 0 is the followed club's (Al-Hilal, 136013, kicks off in 3 h); 1 is under way; 2 finished 3 h ago; the rest to come
   const hrs = [3, -1, -3.2, 5, 9, 26, 28, 30, 50];
   const hilal = clubs.find(c => c.id === '136013');
@@ -1713,7 +1867,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
              strStatus: i === 1 ? '1H' : i === 2 ? 'FT' : 'NS', intHomeScore: i === 1 ? '1' : i === 2 ? '2' : null,
              intAwayScore: i === 1 ? '0' : i === 2 ? '1' : null, strProgress: i === 1 ? '58' : null };
   });
-  const FILE = { league: 'Saudi-Arabian Pro League', id: '4668', updated: new Date(Date.now() - 36e5).toISOString(), events: ROUND };
+  const FILE = { league: 'Saudi-Arabian Pro League', id: '4668', updated: new Date(LEAGUE_NOW.getTime() - 36e5).toISOString(), events: ROUND };
   const seen = [];
   const mock = r => {
     const u = new URL(r.request().url()), hdr = { 'Access-Control-Allow-Origin': '*' };
@@ -1733,6 +1887,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
     seen.length = 0;
+    await p.clock.setFixedTime(LEAGUE_NOW);
     await p.goto(page('tv.html') + '#gap=0&teams=136013&leagues=' + encodeURIComponent('Saudi-Arabian Pro League') + '&panel=matches');
     await p.waitForTimeout(1200);
     const tag = `league round at ${width}x${height}`;
@@ -1768,12 +1923,16 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
       r.blocks.length === 9 && r.pages >= 5 && r.pages <= 8, JSON.stringify(r.blocks));
     check(`${tag}: each game on one line, nothing cut with «…», nothing off screen`,
       !r.bad.length && !r.blocks.join('').includes('…'), r.bad.join(' | '));
-    check(`${tag}: the live score is the file's until lookupevent answers; the finished game shows its score`,
-      r.blocks.some(b => b.includes('١ - ٠')) && r.blocks.some(b => b.includes('٢ - ١')), r.blocks.join(' | '));
+    // the fixtures' load asks for the live game at once, so the first render already carries the looked-up score (2 - 0), not the file's (1 - 0)
+    const first = asked.filter(u => /lookupevent/.test(u));
+    check(`${tag}: right after the fixtures load exactly one lookup is made, for the one game under way`,
+      first.length === 1 && /id=L1/.test(first[0]), first.join(','));
+    check(`${tag}: the live game shows the looked-up score, the finished game its score`,
+      r.blocks.some(b => b.includes('٢ - ٠')) && !r.blocks.some(b => b.includes('١ - ٠')) && r.blocks.some(b => b.includes('٢ - ١')), r.blocks.join(' | '));
     check(`${tag}: the card lists the same 9 games, one line each, titled «المباريات»`,
       r.rows === 9 && r.card.length === 9 && !r.cut.length && r.title === 'المباريات', JSON.stringify({ rows: r.rows, cut: r.cut, t: r.title }));
     check(`${tag}: games in time order (result, live, then the followed club's, then the rest)`,
-      r.card.length === 9 && r.card[0].includes('٢ - ١') && r.card[1].includes('١ - ٠') && r.card[2].startsWith('الهلال'), r.card.join(' | '));
+      r.card.length === 9 && r.card[0].includes('٢ - ١') && r.card[1].includes('٢ - ٠') && r.card[2].startsWith('الهلال'), r.card.join(' | '));
     check(`${tag}: ${r.pages} pages turn every ${r.turn / 1000} s (the round passes in ${r.pages * r.turn / 1000} s, under a minute and a half)`,
       r.turn === 10000 && r.pages * r.turn <= 90000, r.turn);
     // a game under way is refreshed on its own: one lookup, the followed club's game (3 h away) is not asked
@@ -2138,6 +2297,7 @@ const HOME_COMBOS = [   // [name, cards, extra hash, games to put in (when it ha
   ['matches (short names) + prayer row + hours', 'matches,prayerrow,hourly', 'teams=136013', SHORT_GAMES],
   ['verse + stocks', 'verse,stocks', 'stocks=2222,1120,AAPL', null],
   ['adhkar alone', 'adhkar', '', null],
+  ['next prayer + matches + hours', 'nextprayer,matches,hourly', 'teams=136013', SHORT_GAMES],
   ['tasks + forecast', 'tasks,forecast', 'tasks=' + encodeURIComponent(TASKS12.join('\n')), null],
 ];
 const homeCards = async (cards, W, { style = 'current', tight = false, extra = '', games = null, digits = 'hindi', isha = '19:15', width, height } = {}) => {
@@ -2197,6 +2357,14 @@ for (const [style, W] of [['current', 960], ['glass1', 1280], ['dark3', 960], ['
       inCard: cell.left >= card.left - 1 && cell.right <= card.right + 1, z: CARDS[1].z, size: parseFloat(getComputedStyle(i).fontSize) }; });
   check(`home prayer row, ${style}, screen ${W}: «العشاء ٦:٥١ م» on one line inside its cell and the card (text size ${r.size.toFixed(1)} px)`,
     !o.errors.length && r.name === 'العشاء' && r.time === '٦:٥١ م' && r.one && r.inCell && r.inCard, JSON.stringify(r) + o.errors.join('; '));
+  await o.ctx.close();
+}
+// «الصلاة القادمة» in the home screen's pair, beside the hours: both fit, and the one line is no taller than the hours' row
+for (const W of [1920, 1280, 960]) for (const style of ['current', 'dark1', 'glass1', 'dark3', 'glass3']) {   // in the home screen's pair, beside the hours: no taller than them
+  const o = await homeCards('nextprayer,hourly', W, { style }), r = await homeProbe(o.p);
+  const hs = await o.p.evaluate(() => CARDS.map(c => Math.round(c.ul.getBoundingClientRect().height)));
+  check(`home cards next prayer + hours, ${style}, screen ${W}: both fit the ${o.bw}x${o.bh} box, the line no taller than the hours`,
+    !o.errors.length && r.kinds.join() === 'nextprayer,hourly' && !r.overlap.length && !r.outside.length && !r.cut.length && !r.dots.length && hs[0] <= hs[1], JSON.stringify({ r, hs }) + o.errors.join('; '));
   await o.ctx.close();
 }
 // the list in the link: one value works, none or empty is no card, a card once, no more than three, the unknown left out
@@ -2397,7 +2565,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   await ctx.close();
 }
 
-// ---- the bar before the adhan: «الأذان بعد ٨ دقائق» in the last 10 minutes before each prayer, «الإقامة بعد ١٢ دقيقة» from the adhan
+// ---- the bar before the adhan: «أذان المغرب بعد ٨ دقائق» in the last 10 minutes before each prayer, «إقامة المغرب بعد ١٢ دقيقة» from the adhan
 // to the iqama (Fajr 25, Maghrib 10, the rest 20; none for a Friday's Dhuhr); #adhanbar=0 turns it off. Times held with Date.now.
 const ADHAN_TIMES = "buildPrayers({ Fajr: '04:50', Sunrise: '06:05', Dhuhr: '11:40', Asr: '15:00', Maghrib: '17:45', Isha: '19:15' });";
 const barAt = (p, day, hhmm, ss = '00') => p.evaluate(([iso, times]) => {
@@ -2418,13 +2586,13 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
       asr: await barAt(p, THU, '15:05'), isha: await barAt(p, THU, '19:20'), none: await barAt(p, THU, '13:00') };
     const tag = `adhan bar ${width}x${height} ${digits}`;
     check(`${tag}: no script errors`, !errors.length, errors.join('; '));
-    check(`${tag}: the last 10 minutes: «الأذان بعد …», shown from exactly 10 minutes before, not 11`,
-      !r.m10.hidden && r.m10.text === N('الأذان بعد ١٠ دقائق') && !r.m8.hidden && r.m8.text === N('الأذان بعد ٧ دقائق') && r.m1.text === N('الأذان بعد ١ دقيقة') && r.over10.hidden, JSON.stringify([r.m10, r.m8, r.m1, r.over10]));
-    check(`${tag}: from the adhan to the iqama: «الإقامة بعد …» (Maghrib 10, Fajr 25, Asr and Isha 20, Dhuhr 20)`,
-      r.at.text === N('الإقامة بعد ١٠ دقائق') && r.q5.text === N('الإقامة بعد ٥ دقائق') && r.end.hidden && r.fajr.text === N('الإقامة بعد ٢٥ دقيقة') && r.asr.text === N('الإقامة بعد ١٥ دقيقة')
-      && r.isha.text === N('الإقامة بعد ١٥ دقيقة') && r.dhuhr.text === N('الإقامة بعد ٢٠ دقيقة'), JSON.stringify([r.at.text, r.q5.text, r.end.hidden, r.fajr.text, r.asr.text, r.isha.text, r.dhuhr.text]));
+    check(`${tag}: the last 10 minutes: «أذان المغرب بعد …», shown from exactly 10 minutes before, not 11`,
+      !r.m10.hidden && r.m10.text === N('أذان المغرب بعد ١٠ دقائق') && !r.m8.hidden && r.m8.text === N('أذان المغرب بعد ٧ دقائق') && r.m1.text === N('أذان المغرب بعد ١ دقيقة') && r.over10.hidden, JSON.stringify([r.m10, r.m8, r.m1, r.over10]));
+    check(`${tag}: from the adhan to the iqama: «إقامة المغرب بعد …», each prayer by its own name (Maghrib 10, Fajr 25, Asr and Isha 20, Dhuhr 20)`,
+      r.at.text === N('إقامة المغرب بعد ١٠ دقائق') && r.q5.text === N('إقامة المغرب بعد ٥ دقائق') && r.end.hidden && r.fajr.text === N('إقامة الفجر بعد ٢٥ دقيقة') && r.asr.text === N('إقامة العصر بعد ١٥ دقيقة')
+      && r.isha.text === N('إقامة العشاء بعد ١٥ دقيقة') && r.dhuhr.text === N('إقامة الظهر بعد ٢٠ دقيقة'), JSON.stringify([r.at.text, r.q5.text, r.end.hidden, r.fajr.text, r.asr.text, r.isha.text, r.dhuhr.text]));
     check(`${tag}: Friday's Dhuhr has no iqama countdown, the adhan countdown before it is there; between prayers nothing`,
-      r.dhuhrFri.hidden && !r.beforeFriday.hidden && r.none.hidden, JSON.stringify([r.dhuhrFri, r.beforeFriday.hidden, r.none.hidden]));
+      r.dhuhrFri.hidden && !r.beforeFriday.hidden && r.beforeFriday.text === N('أذان الجمعة بعد ٥ دقائق') && r.none.hidden, JSON.stringify([r.dhuhrFri, r.beforeFriday, r.none.hidden]));
     check(`${tag}: a slim bar at the very top, across the screen`, r.m8.top === 0 && r.m8.h > 12 && r.m8.h < 0.035 * height + 1 && r.m8.w === width, JSON.stringify(r.m8));
     const clear = await p.evaluate(() => document.getElementById('adbar').getBoundingClientRect().bottom <= document.querySelector('.top').getBoundingClientRect().top + 1);
     check(`${tag}: the bar is above the date block and the weather (they start below it)`, clear, JSON.stringify(r.m8));
@@ -2443,12 +2611,12 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
     }, [`2026-10-22T${hhmmss}+03:00`, ADHAN_TIMES]);
     const half = await at('17:40:30');   // 4 min 30 s before Maghrib
     check(`bar and panel at 4 min 30 s before the prayer, ${width}x${height}: both say ٤ دقائق`,
-      !errors.length && half.bar === 'الأذان بعد ٤ دقائق' && half.panel === 'بعد ٤ دقائق', JSON.stringify(half));
+      !errors.length && half.bar === 'أذان المغرب بعد ٤ دقائق' && half.panel === 'بعد ٤ دقائق', JSON.stringify(half));
     const apart = [];
     for (let s = 0; s < 600; s += 3) {   // the last 10 minutes, every 3 seconds
       const t = 17 * 3600 + 35 * 60 + s, hh = [Math.floor(t / 3600), Math.floor(t % 3600 / 60), t % 60].map(n => String(n).padStart(2, '0')).join(':');
       const r = await at(hh);
-      if (r.bar.replace('الأذان ', '') !== r.panel) apart.push(hh + ' ' + r.bar + ' / ' + r.panel);
+      if (r.bar.replace('أذان المغرب ', '') !== r.panel) apart.push(hh + ' ' + r.bar + ' / ' + r.panel);
     }
     check(`bar and panel, every 3 seconds of the last 10 minutes, ${width}x${height}: always the same time`, !apart.length, apart.slice(0, 4).join(' | '));
     await ctx.close();
@@ -2467,6 +2635,42 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   const e = await open('tv.html', 'panel=verse', { now: '2026-10-23T10:00:00Z' });   // a fixed time far from any prayer: the real clock may sit in an iqama window
   check('adhan bar: hidden until the times are known, no errors', !e.errors.length && await e.p.evaluate(() => { tickPrayer(); return document.getElementById('adbar').hidden; }));
   await e.ctx.close();
+}
+
+// while the adhan plays in the launcher (window.UrtvNative.adhan(), mocked here): «أذان المغرب · اختيار: إيقاف الأذان», and gone again after
+{
+  const live = (o) => `window.UrtvNative = { adhan: () => ${o ? JSON.stringify(JSON.stringify(o)) : "''"} };`;
+  const { p, ctx, errors } = await open('tv.html', 'panel=prayers', { now: '2026-10-22T10:00:00Z' });   // Thursday; far from a prayer
+  const bar = () => p.evaluate(() => { const b = document.getElementById('adbar'); return { hidden: b.hidden, text: b.textContent }; });
+  const ask = async (o) => { await p.evaluate(live(o) + ' adhanLiveTick();'); return bar(); };
+  let r = await ask({ live: true, prayer: 4, any: true });
+  check('adhan playing, any key stops it (the default): «أذان المغرب  ·  أي زر يوقف الأذان»', !r.hidden && r.text === 'أذان المغرب  ·  أي زر يوقف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: 4, any: false });
+  check('adhan playing with «إيقاف الأذان بأي زر» off: «أذان المغرب  ·  اختيار: إيقاف الأذان»', r.text === 'أذان المغرب  ·  اختيار: إيقاف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: 0, any: true });
+  check('Fajr: «أذان الفجر  ·  أي زر يوقف الأذان»', r.text === 'أذان الفجر  ·  أي زر يوقف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: -1, any: true });
+  check('adhan from the computer (no prayer named): «الأذان  ·  أي زر يوقف الأذان»', r.text === 'الأذان  ·  أي زر يوقف الأذان', JSON.stringify(r));
+  r = await ask({ live: true, prayer: null, any: false });
+  check('an answer with no prayer number is not an adhan (an old launcher): no bar', r.hidden, JSON.stringify(r));
+  r = await ask(null);
+  check('adhan over: the bar goes', r.hidden, JSON.stringify(r));
+  await p.evaluate(live({ live: true, prayer: 2, any: false }) + ' adhanLiveTick();');
+  r = await p.evaluate(() => { const was = isFriday; window.isFriday = () => true; ADHAN_LIVE = { prayer: 2, any: false }; tickAdhanBar(); const t = document.getElementById('adbar').textContent; window.isFriday = was; return t; });
+  check('a Friday\'s Dhuhr: «أذان الجمعة»', r === 'أذان الجمعة  ·  اختيار: إيقاف الأذان', r);
+  await p.evaluate(() => { window.UrtvNative = { adhan: () => { throw new Error('boom'); } }; adhanLiveTick(); });
+  check('adhan: a failing native call is harmless (the bar goes, no errors)', !errors.length && (await bar()).hidden, errors.join('; '));
+  await p.evaluate(() => { window.UrtvNative = undefined; ADHAN_LIVE = null; adhanLiveTick(); });
+  check('adhan: nothing without the app (no UrtvNative)', !errors.length && (await bar()).hidden);
+  await ctx.close();
+  const off = await open('tv.html', 'panel=prayers&adhanbar=0', { now: '2026-10-22T10:00:00Z' });
+  await off.p.evaluate(live({ live: true, prayer: 4, any: false }) + ' adhanLiveTick();');
+  check('adhan playing, «تنبيه قبل الأذان» off: no bar (OK then is an ordinary key)', !off.errors.length && (await off.p.evaluate(() => document.getElementById('adbar').hidden)));
+  await off.ctx.close();
+  const w = await open('tv.html', 'panel=prayers&widget=1', { width: 461, height: 250, now: '2026-10-22T10:00:00Z' });
+  await w.p.evaluate(live({ live: true, prayer: 4, any: false }) + ' adhanLiveTick();');
+  check('adhan playing: not in the launcher\'s card page (the home screen has its own bar)', !w.errors.length && (await w.p.evaluate(() => document.getElementById('adbar').hidden)));
+  await w.ctx.close();
 }
 
 // ---- «يومك» (today): the next prayer, the next game of a followed team, the first open task, the next occasion; a line with
@@ -2525,9 +2729,9 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
 // ---- the settings' pickers draw the focused card live: the page itself, card only (#panel=<choice>&cardstyle=<style>&widget=1) with the
 // current settings, in a box of 436 x 300 over a dimmed photo (SettingsActivity.pickWithPreview, which sizes its frame to the card). Every choice and every style: no errors, drawn, inside the box.
 const PREVIEW = [436, 300];
-for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'matches', 'verse', 'wisdom', 'adhkar', 'stocks', 'tasks', 'year', 'smart', 'today']) {
+for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'nextprayer', 'matches', 'verse', 'wisdom', 'adhkar', 'stocks', 'tasks', 'year', 'smart', 'today']) {
   for (const style of ['current', 'dark1', 'glass1', 'dark3', 'glass3']) {
-    if (style !== 'current' && !['verse', 'matches', 'prayerrow', 'hourly', 'today', 'adhkar'].includes(panel)) continue;
+    if (style !== 'current' && !['verse', 'matches', 'prayerrow', 'nextprayer', 'hourly', 'today', 'adhkar'].includes(panel)) continue;
     const o = await open('tv.html', `city=%D8%AC%D8%AF%D8%A9&lat=21.5433&lon=39.1728&teams=136013&stocks=2222,1120,AAPL&tasks=${encodeURIComponent('اتصل بالسباك\nشراء حليب')}&panel=${panel}&cardstyle=${style}&widget=1`,
       { width: PREVIEW[0], height: PREVIEW[1], now: HOME_NOW });
     await o.p.evaluate(HOME_SEED() + ' renderPanel(false);');
@@ -2858,12 +3062,29 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
       return false;
     } });
     await p.waitForTimeout(500);
-    const first = await p.evaluate(() => document.getElementById('wx-desc').textContent);
+    const first = await p.evaluate(() => document.getElementById('wx-dust').textContent);
     round = 2;
     await p.evaluate(() => loadWeather());
     await p.waitForTimeout(500);
-    const second = await p.evaluate(() => ({ t: document.getElementById('wx-desc').textContent, dust: document.getElementById('wx-desc').classList.contains('dust') }));
-    check('weather: the last good dust reading stands when the air-quality request fails', first === 'غبار' && second.t === 'غبار' && second.dust, first + ' / ' + JSON.stringify(second));
+    const second = await p.evaluate(() => ({ t: document.getElementById('wx-dust').textContent, sky: document.getElementById('wx-desc').textContent }));
+    check('weather: the last good dust reading stands when the air-quality request fails, beside the condition', first === 'غبار' && second.t === 'غبار' && second.sky === 'صافي', first + ' / ' + JSON.stringify(second));
+    await ctx.close();
+  }
+}
+
+// ---- issue #29: the air-quality model says thousands of µg/m³ of dust over a clear Riyadh; the visibility decides
+{
+  const hdr = { 'Access-Control-Allow-Origin': '*' };
+  for (const [vis, want, why] of [[20800, '', '20.8 km: no dust'], [4000, 'غبار', '4 km: «غبار», not «كثيف»'], [800, 'غبار كثيف', '800 m: «غبار كثيف»']]) {
+    const { p, ctx } = await open('tv.html', 'panel=forecast&teams=', { now: new Date('2026-10-22T09:00:00Z'), net: r => {
+      const u = r.request().url();
+      if (/air-quality-api/.test(u)) { r.fulfill({ json: { current: { pm10: 1654, dust: 2466 } }, headers: hdr }); return true; }
+      if (/api\.open-meteo\.com\/v1\/forecast/.test(u)) { r.fulfill({ json: { current: { temperature_2m: 33, weather_code: 0, visibility: vis }, daily: { time: ['2026-10-22'], weather_code: [0], temperature_2m_max: [38], temperature_2m_min: [24] } }, headers: hdr }); return true; }
+      return false;
+    } });
+    await p.waitForTimeout(500);
+    const got = await p.evaluate(() => document.getElementById('wx-dust').textContent);
+    check(`weather: dust 2466 µg/m³ with ${why}`, got === want, JSON.stringify(got));
     await ctx.close();
   }
 }
@@ -2875,12 +3096,116 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
     const t = computePrayers(), [mh, mm] = t.Maghrib.split(':').map(Number), [ih, im] = t.Isha.split(':').map(Number);
     buildPrayers(t); renderPanel(false);
     return { t, gap: (ih * 60 + im) - (mh * 60 + mm), rows: [...document.querySelectorAll('#week-list li')].map(li => li.textContent.replace(/\s+/g, ' ').trim()),
-             f: [fmt12(24, 14), fmt12(12, 0), fmt12(0, 5), fmt12(23, 59)] };
+             f: [fmtTime(24, 14), fmtTime(12, 0), fmtTime(0, 5), fmtTime(23, 59)] };
   });
   check('computePrayers: Isha is 90 minutes after Maghrib even past midnight (Oslo, midsummer)', r.gap === 90 && +r.t.Isha.slice(0, 2) >= 24, JSON.stringify(r.t));
   check('prayer times card: an Isha after midnight reads ١٢:١٤ ص', r.rows[5] && r.rows[5].includes('ص') && r.rows[5].startsWith('العشاء'), r.rows.join(' | '));
-  check('fmt12: 24:14 is 12:14 ص, noon م, 0:05 ص, 23:59 م', r.f.join() === '١٢:١٤ ص,١٢:٠٠ م,١٢:٠٥ ص,١١:٥٩ م', r.f.join());
+  check('fmtTime (the default, 12-hour): 24:14 is 12:14 ص, noon م, 0:05 ص, 23:59 م', r.f.join() === '١٢:١٤ ص,١٢:٠٠ م,١٢:٠٥ ص,١١:٥٩ م', r.f.join());
   check('computePrayers: no script errors', !errors.length, errors.join('; '));
+  await ctx.close();
+}
+
+// ---- the calculation of the prayers: the country's own by the zone, the Ja'fari for #pm=jafari, Umm al-Qura as it was for a Saudi city
+{
+  const method = async hash => { const { p, ctx } = await open('tv.html', hash, { now: new Date('2026-10-23T09:00:00Z') }); const m = await p.evaluate(() => CONFIG.prayerMethod); await ctx.close(); return m; };
+  const got = [await method('tz=Asia%2FRiyadh'), await method('tz=Asia%2FKuwait'), await method('tz=Asia%2FQatar'), await method('tz=Asia%2FDubai'), await method('tz=Asia%2FBahrain'),
+    await method('tz=Asia%2FMuscat'), await method('tz=Europe%2FOslo'), await method(''), await method('tz=Asia%2FKuwait&pm=jafari'), await method('pm=auto&tz=Asia%2FQatar')];
+  check('prayer method: Riyadh 4, Kuwait 9, Qatar 10, Dubai 16, Bahrain 8, Muscat 8, Oslo 4, no zone 4, #pm=jafari 0 anywhere, #pm=auto the country\'s',
+    got.join() === '4,9,10,16,8,8,4,4,0,10', got.join());
+  // Egypt, the Levant and North Africa: each zone its method (Aladhan's ids; Syria, Lebanon and Palestine the Egyptian, 5)
+  const zones = { 'Africa/Cairo': 5, 'Asia/Amman': 23, 'Asia/Damascus': 5, 'Asia/Beirut': 5, 'Asia/Gaza': 5, 'Asia/Hebron': 5, 'Africa/Casablanca': 21, 'Africa/Algiers': 19, 'Africa/Tunis': 18 };
+  const gotZ = [];
+  for (const z of Object.keys(zones)) gotZ.push(await method('tz=' + encodeURIComponent(z)));
+  check('prayer method: Cairo 5, Amman 23, Damascus, Beirut, Gaza and Hebron 5, Casablanca 21, Algiers 19, Tunis 18; #pm=jafari still 0',
+    gotZ.join() === Object.values(zones).join() && await method('tz=Africa%2FCairo&pm=jafari') === 0, gotZ.join());
+
+  // those countries' cities offline: the page's own formula against the independent reference (tests/prayer_gold_countries.tsv), one minute of slack
+  {
+    const ref = readFileSync(path.join(ROOT, 'tests/prayer_gold_countries.tsv'), 'utf8').split('\n').filter(l => l && !l.startsWith('#')).map(l => l.split('\t'));
+    const mins = t => t.split(' ').map(x => +x.slice(0, 2) * 60 + +x.slice(3));
+    const bad = [];
+    for (const tz of Object.keys(zones)) {
+      const { p, ctx, errors } = await open('tv.html', 'tz=' + encodeURIComponent(tz), { now: new Date('2026-10-23T09:00:00Z') });
+      for (const [name, date, lat, lon, z, want] of ref.filter(r => r[4] === tz)) {
+        await p.clock.setFixedTime(new Date(date + 'T09:00:00Z'));
+        const t = await p.evaluate(([la, lo]) => { CONFIG.latitude = +la; CONFIG.longitude = +lo; const r = computePrayers(); return [r.Fajr, r.Sunrise, r.Dhuhr, r.Asr, r.Maghrib, r.Isha].join(' '); }, [lat, lon]);
+        if (mins(t).some((m, i) => Math.abs(m - mins(want)[i]) > 1)) bad.push(`${name} ${date}: ${t} vs ${want}`);
+      }
+      if (errors.length) bad.push(errors.join('; '));
+      await ctx.close();
+    }
+    check('the page computes those countries\' cities within a minute of the independent reference', ref.length >= 40 && !bad.length, bad.slice(0, 4).join('; '));
+  }
+
+  // a Saudi city keeps exactly the times it had (tests/prayer_gold.tsv is what the page computed before the Gulf methods)
+  const gold = readFileSync(path.join(ROOT, 'tests/prayer_gold.tsv'), 'utf8').split('\n').filter(l => l && !l.startsWith('#')).map(l => l.split('\t'));
+  const { p, ctx, errors } = await open('tv.html', 'tz=Asia%2FRiyadh', { now: new Date('2026-10-23T09:00:00Z') });
+  const bad = [];
+  for (const [name, date, lat, lon, , want] of gold) {
+    await p.clock.setFixedTime(new Date(date + 'T09:00:00Z'));
+    const t = await p.evaluate(([la, lo]) => { CONFIG.latitude = +la; CONFIG.longitude = +lo; const r = computePrayers(); return [r.Fajr, r.Sunrise, r.Dhuhr, r.Asr, r.Maghrib, r.Isha].join(' '); }, [lat, lon]);
+    if (t !== want) bad.push(`${name} ${date}: ${t} vs ${want}`);
+  }
+  check('Saudi cities: the page computes the same six times as before for 4 cities on 3 days (Ramadan included)', gold.length === 12 && !bad.length && !errors.length, bad.join('; ') + errors.join('; '));
+  await ctx.close();
+
+  // the Gulf cities and the Ja'fari offline (the launcher's PrayerMathRun checks the structure; these are the same numbers on the page)
+  for (const [label, hash, when, want] of [
+      ['Kuwait', 'tz=Asia%2FKuwait&lat=29.3697&lon=47.9783', '2026-10-23', '04:35 05:55 11:32 14:45 17:10 18:27'],
+      ['Doha', 'tz=Asia%2FQatar&lat=25.2854&lon=51.5310', '2026-10-23', '04:19 05:36 11:18 14:34 17:00 18:30'],
+      ['Manama', 'tz=Asia%2FBahrain&lat=26.2154&lon=50.5832', '2026-10-23', '04:17 05:41 11:22 14:37 17:03 18:33'],
+      ['Muscat', 'tz=Asia%2FMuscat&lat=23.5880&lon=58.3829', '2026-10-23', '04:45 06:07 11:51 15:08 17:34 19:04'],
+      ['Sharjah', 'tz=Asia%2FDubai&lat=25.3463&lon=55.4209', '2026-10-12', '04:58 06:12 12:08 15:28 17:57 19:11'],
+      ['Riyadh, Ja\'fari', 'tz=Asia%2FRiyadh&lat=24.6877&lon=46.7219&pm=jafari', '2026-10-23', '04:47 05:55 11:37 14:54 17:34 18:18']]) {
+    const { p, ctx, errors } = await open('tv.html', hash, { now: new Date(when + 'T09:00:00Z') });
+    const t = await p.evaluate(() => { const r = computePrayers(); return [r.Fajr, r.Sunrise, r.Dhuhr, r.Asr, r.Maghrib, r.Isha].join(' '); });
+    check(`${label}: the page computes its method's times, the same as the launcher`, t === want && !errors.length, t + ' vs ' + want + errors.join('; '));
+    await ctx.close();
+  }
+
+  // Aladhan is asked for the same method
+  for (const [label, hash, id] of [['Riyadh', 'tz=Asia%2FRiyadh', 4], ['Kuwait', 'tz=Asia%2FKuwait', 9], ['Dubai', 'tz=Asia%2FDubai', 16], ['Cairo', 'tz=Africa%2FCairo', 5], ['Amman', 'tz=Asia%2FAmman', 23], ['Casablanca', 'tz=Africa%2FCasablanca', 21], ['Algiers', 'tz=Africa%2FAlgiers', 19], ['Tunis', 'tz=Africa%2FTunis', 18], ['Riyadh, Ja\'fari', 'tz=Asia%2FRiyadh&pm=jafari', 0]]) {
+    const urls = [];
+    const { p, ctx } = await open('tv.html', hash + '&panel=prayers', { now: new Date('2026-10-23T09:00:00Z'), net: r => { if (/aladhan/.test(r.request().url())) { urls.push(r.request().url()); r.abort(); return true; } return false; } });
+    await p.evaluate(() => loadPrayers());
+    check(`${label}: Aladhan is asked for method=${id}`, urls.length > 0 && urls.every(u => u.includes(`method=${id}&`)), urls.join(' '));
+    await ctx.close();
+  }
+}
+
+// ---- an Aladhan answer is used whole or not at all: plain and annotated times in, a missing, out-of-range or wrong-day field out
+{
+  const answer = (timings, date = '23-10-2026') => JSON.stringify({ code: 200, data: { timings, date: { gregorian: { date } } } });
+  const good = { Fajr: '04:30', Sunrise: '05:50', Dhuhr: '11:35', Asr: '14:50', Maghrib: '17:18', Isha: '18:48' };
+  const run = async body => {
+    const { p, ctx, errors } = await open('tv.html', 'tz=Asia%2FRiyadh&panel=prayers', { now: new Date('2026-10-23T09:00:00Z'),
+      net: r => { if (/aladhan/.test(r.request().url())) { r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body }); return true; } return false; } });
+    await p.evaluate(() => { PRAYERS = []; DAY_TIMES = null; PRAYERS_DAY = ''; });
+    await p.evaluate(() => loadPrayers());
+    const r = await p.evaluate(() => ({ day: PRAYERS_DAY, list: PRAYERS.map(x => x.h + ':' + x.mi).join(' '), finite: PRAYERS.every(x => Number.isFinite(x.h) && Number.isFinite(x.mi)), n: PRAYERS.length }));
+    await ctx.close();
+    return { ...r, errors };
+  };
+  const plain = await run(answer(good));
+  check('Aladhan answer: plain times are used', plain.day === '23-10-2026|api' && plain.list === '4:30 11:35 14:50 17:18 18:48' && plain.finite, JSON.stringify(plain));
+  const noted = await run(answer({ ...good, Fajr: '04:30 (+03)', Isha: '18:48 (AST)' }));
+  check('Aladhan answer: «04:30 (+03)» is 04:30, not NaN', noted.day === '23-10-2026|api' && noted.list === '4:30 11:35 14:50 17:18 18:48' && noted.finite, JSON.stringify(noted));
+  const midnight = await run(answer({ ...good, Maghrib: '23:50', Isha: '00:20' }));
+  check('Aladhan answer: an Isha after midnight («00:20») is kept as the absolute 24:20', midnight.list.endsWith('24:20') && midnight.finite, JSON.stringify(midnight));
+  for (const [label, body] of [['a missing Isha', answer({ ...good, Isha: undefined })], ['a non-time', answer({ ...good, Asr: 'n/a' })], ['25:00', answer({ ...good, Dhuhr: '25:00' })],
+      ['12:7', answer({ ...good, Maghrib: '12:7' })], ['the wrong day', answer(good, '22-10-2026')], ['no timings', JSON.stringify({ code: 200, data: {} })], ['not JSON', 'oops']]) {
+    const r = await run(body);
+    check(`Aladhan answer with ${label}: none of it is used, the computed times stand (all finite, five of them)`, r.day === '23-10-2026|calc' && r.n === 5 && r.finite && !r.errors.length, JSON.stringify(r));
+  }
+  // an answer that fails after good times are in does not replace them
+  const { p, ctx } = await open('tv.html', 'tz=Asia%2FRiyadh&panel=prayers', { now: new Date('2026-10-23T09:00:00Z'),
+    net: r => { if (/aladhan/.test(r.request().url())) { r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: answer({ ...good, Fajr: 'x' }) }); return true; } return false; } });
+  await p.evaluate(t => { buildPrayers(t); PRAYERS_DAY = '23-10-2026|api'; }, good);
+  await p.evaluate(() => loadPrayers());
+  const kept = await p.evaluate(() => PRAYERS.map(x => x.h + ':' + x.mi).join(' ') + ' ' + PRAYERS_DAY);
+  check("Aladhan answer: a bad answer does not replace today's good times", kept === '4:30 11:35 14:50 17:18 18:48 23-10-2026|api', kept);
+  const thrown = await p.evaluate(() => { try { buildPrayers({ Fajr: '04:30', Dhuhr: 'x:y', Asr: '14:50', Maghrib: '17:18', Isha: '18:48' }); return 'accepted'; } catch (e) { return PRAYERS.map(x => x.h).join(','); } });
+  check('buildPrayers: a field that is not a time throws and publishes nothing (the old times stay)', thrown === '4,11,14,17,18', thrown);
   await ctx.close();
 }
 
@@ -2908,9 +3233,14 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
   await p.evaluate(() => { const now = Date.now(), seen = {}; for (let i = 0; i < 9; i++) { localStorage.setItem('snap6:#n' + i, '[]'); seen['snap6:#n' + i] = now - (i + 1) * 36e5; }
     localStorage.setItem('lsSeen', JSON.stringify(seen)); localStorage.setItem('forecast:5.000,6.000', '[]'); const s2 = JSON.parse(localStorage.getItem('lsSeen')); s2['forecast:5.000,6.000'] = now - 15 * 864e5; localStorage.setItem('lsSeen', JSON.stringify(s2)); });
   await p.waitForTimeout(500);   // Chromium writes storage out a moment after the write; the page must not start before that
+  // the copy for another city, 15 days unused, is put there at the start of every load from here on (not left to the browser's write-out, which
+  // a boot can outrun: a boot that found it «just seen» would then keep it for two weeks more)
+  await ctx.addInitScript(() => { try { const k = 'forecast:5.000,6.000', seen = JSON.parse(localStorage.getItem('lsSeen') || '{}') || {};
+    seen[k] = Date.now() - 15 * 864e5; localStorage.setItem('lsSeen', JSON.stringify(seen)); localStorage.setItem(k, '[]'); } catch (e) {} });
   await carry(p); await p.goto('about:blank'); await p.goto(page('tv.html') + '#gap=0&lat=21.5433&lon=39.1728&panel=hourly&cardstyle=dark1&teams=');   // (a new page: a changed #hash alone is no reload)
   await p.waitForTimeout(500);
-  const after = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('snap6:')).length);
+  // the other copies, not counting this page's own: whether its own copy was written out before the boot pruned is the browser's timing
+  const after = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('snap6:') && k !== LS.snap).length);
   let gone = await p.evaluate(() => localStorage.getItem('forecast:5.000,6.000'));
   // Chromium writes the storage out a moment after the page's own writes (the known flake of this file, see carry()): the pruning is idempotent,
   // so a boot that raced the write is followed by up to two more; a pruning that does not work leaves the key every time
@@ -2920,7 +3250,7 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
     await p.waitForTimeout(500);
     gone = await p.evaluate(() => localStorage.getItem('forecast:5.000,6.000'));
   }
-  check('storage: the link-keyed snapshots are kept to the newest six (this page\'s own included)', after <= 6, String(after));
+  check('storage: the other link-keyed snapshots are kept to the newest six (eleven were there)', after <= 6, String(after));
   check('storage: a copy for another city unused for two weeks is dropped', gone === null);
   await ctx.close();
 }
@@ -2961,15 +3291,17 @@ const oneLine = p => p.evaluate(() => [...(((CARDS.find(c => c.eff === 'matches'
   const cen = e => { const b = bx(e); return (b.left + b.right) / 2; };
   const mk = tm => ({ nm: tm.querySelector('.nm'), cr: tm.querySelector('img.cr') });
   const h = mk(tms[0]), a = mk(tms[1]);
+  // the crests on screen: a row that dropped its crests (.nocr, to keep its full names) has them in the DOM but not shown
+  const on = e => e && getComputedStyle(e).display !== 'none' ? e : null, hc = on(h.cr), ac = on(a.cr);
   const mids = kids.map(k => { const b = bx(k); return (b.top + b.bottom) / 2; });
   return {
     text: li.textContent.replace(/\s+/g, ' ').trim(), cut: rowCut(row), dots: li.innerText.includes('…'),
     oneLine: Math.max(...mids) - Math.min(...mids) < r.height * .5 && li.getBoundingClientRect().height < 3 * parseFloat(getComputedStyle(row).fontSize),
     inside: kids.every(k => { const b = bx(k); return !b.width || (b.left >= r.left - .5 && b.right <= r.right + .5); }),
     // right to left: the home club, its crest, the score, the guest's crest, the guest club (a missing crest leaves its name next to the score)
-    order: [h.nm, h.cr, mid, a.cr, a.nm].filter(Boolean).map(cen).every((x, k, all) => !k || x < all[k - 1]),
-    gapHome: h.cr ? Math.abs(bx(h.cr).right - bx(h.nm).left) : 0, gapAway: a.cr ? Math.abs(bx(a.nm).right - bx(a.cr).left) : 0,
-    crests: [h.cr, a.cr].filter(Boolean).length, domHome: h.cr ? !!(h.nm.compareDocumentPosition(h.cr) & 4) : true, domAway: a.cr ? !!(a.cr.compareDocumentPosition(a.nm) & 4) : true,
+    order: [h.nm, hc, mid, ac, a.nm].filter(Boolean).map(cen).every((x, k, all) => !k || x < all[k - 1]),
+    gapHome: hc ? Math.abs(bx(hc).right - bx(h.nm).left) : 0, gapAway: ac ? Math.abs(bx(a.nm).right - bx(ac).left) : 0,
+    crests: [h.cr, a.cr].filter(Boolean).length, shown: [h.cr, a.cr].filter(e => e && getComputedStyle(e).display !== 'none').length, domHome: h.cr ? !!(h.nm.compareDocumentPosition(h.cr) & 4) : true, domAway: a.cr ? !!(a.cr.compareDocumentPosition(a.nm) & 4) : true,
     date: (row.querySelector('.mwhen') || {}).textContent || '', dt: row.querySelector('.dt').textContent.replace(/\s+/g, ' ').trim(), size: row.style.fontSize,
     font: parseFloat(getComputedStyle(row).fontSize),
   };
@@ -2985,7 +3317,7 @@ for (const [cards, W, wide, label] of [['matches,prayerrow,hourly', 1920, 560, '
     check(`${tag}: ${games.length} games, each on one line inside the card, nothing cut, no «…»`,
       !o.errors.length && rows.length >= Math.min(2, games.length) && rows.length <= games.length && rows.every(r => r.oneLine && !r.cut && !r.dots && r.inside), JSON.stringify(rows) + o.errors.join('; '));
     check(`${tag}: the crests sit next to the score, close to the names: club, crest, score, crest, club`,
-      rows.every(r => r.order && r.domHome && r.domAway && r.gapHome < r.font * .7 && r.gapAway < r.font * .7) && rows.some(r => r.crests === 2), JSON.stringify(rows));
+      rows.every(r => r.order && r.domHome && r.domAway && r.gapHome < r.font * .7 && r.gapAway < r.font * .7) && rows.some(r => r.shown === 2), JSON.stringify(rows));
     check(`${tag}: the date is on the line: a finished game says «انتهت» and the day, a game to come the day and time and «بعد …»`,
       rows.every(r => r.date && (r.dt === 'انتهت' ? /[٠-٩]+ \S+$/.test(r.date.trim()) : /^بعد [٠-٩]+ \S+$/.test(r.dt))), JSON.stringify(rows.map(r => [r.date, r.dt])));
     check(`${tag}: the games of a card share one size`, new Set(rows.map(r => r.size)).size === 1, JSON.stringify(rows.map(r => r.size)));
@@ -3006,10 +3338,24 @@ for (const width of [400, 330]) {   // a narrow box: the steps down the ladder, 
   await o.p.evaluate(put(MIXED) + ' renderPanel(false);'); await o.p.evaluate(() => loadCrests()); await o.p.waitForTimeout(300);
   await o.p.evaluate(() => { for (const c of CARDS) c.ul.__h = null; renderPanel(false, 'matches'); });
   const rows = await oneLine(o.p), r = await homeProbe(o.p);
+  // does the long row fit with its full names once its crests are gone (the full date, the full size)? Measured on the page's own fonts,
+  // so the rule is checked, not one font's widths: full names first, no crests before short names, short names only when that does not fit
+  const fullFits = await o.p.evaluate(() => {
+    const row = [...document.querySelectorAll('li.mg')][2].firstElementChild, save = row.innerHTML, cls = row.className, fs = row.style.fontSize;
+    row.querySelectorAll('[data-full]').forEach(e => { e.textContent = e.dataset.full; });
+    row.classList.add('nocr'); row.style.fontSize = '';
+    const ok = !rowCut(row);
+    row.innerHTML = save; row.className = cls; row.style.fontSize = fs;
+    return ok;
+  });
   check(`home matches alone, ${width} px wide: one line each, the short date or a smaller size, nothing cut or ending in «…»`,
     !o.errors.length && rows.length === 3 && rows.every(x => x.oneLine && !x.cut && !x.dots && x.inside) && !r.cut.length && !r.dots.length, JSON.stringify([rows, r]));
-  check(`home matches alone, ${width} px wide: the long names took their short form and every row still has its date`,
-    rows[2].text.includes('اليونايتد') && rows.every(x => x.date), JSON.stringify(rows.map(x => [x.text, x.date, x.size])));
+  // the long row loses its crests first and keeps the full names; only a card too narrow for that takes the short names
+  check(`home matches alone, ${width} px wide: the long row has no crests, ${fullFits ? 'keeps its full names (they fit without crests)' : 'takes the short names (the full ones do not fit even without crests)'}, and every row still has its date`,
+    rows[2].shown === 0 && rows.every(x => x.date) && (fullFits ? rows[2].text.includes('مانشستر يونايتد') : rows[2].text.includes('اليونايتد') && !rows[2].text.includes('مانشستر')),
+    JSON.stringify([fullFits, rows.map(x => [x.text, x.date, x.size, x.shown])]));
+  if (width === 330) check('home matches alone, 330 px wide: too narrow for the long row\'s full names even without crests', !fullFits);
+  if (width === 400) check(`home matches alone, ${width} px wide: rows that fit with their crests keep them`, rows[0].shown === 2 && rows[1].shown === 1, JSON.stringify(rows.map(x => x.shown)));
   await o.ctx.close();
 }
 {   // a smaller card step brings the whole names and date back where they now fit, and the other way round
@@ -3184,10 +3530,10 @@ for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
     check('adj: the prayers card lists the moved times and the sunrise as it was', /(الظهر|الجمعة)<\/span><span class="dt">١١:٤٢ ص/.test(r.rows) && /العشاء<\/span><span class="dt">٧:١٤ م/.test(r.rows) && /الشروق<\/span><span class="dt">٦:٠٥ ص/.test(r.rows), r.rows);
     const before = await at(p, '2026-10-22', '11:31', '59');
     const m10 = await at(p, '2026-10-22', '11:32', '00');
-    check('adj: the adhan bar starts 10 minutes before the MOVED Dhuhr (11:42), not before 11:40', before.bar === '' && m10.bar === 'الأذان بعد ١٠ دقائق', JSON.stringify([before.bar, m10.bar]));
+    check('adj: the adhan bar starts 10 minutes before the MOVED Dhuhr (11:42), not before 11:40', before.bar === '' && m10.bar === 'أذان الظهر بعد ١٠ دقائق', JSON.stringify([before.bar, m10.bar]));
     const q = await at(p, '2026-10-22', '11:42', '00'), old = await at(p, '2026-10-22', '11:40', '30');
-    check('adj: the iqama countdown runs from the moved Dhuhr: «الإقامة بعد ٢٠ دقيقة» at 11:42, only the adhan bar before it at 11:40:30',
-      q.bar === 'الإقامة بعد ٢٠ دقيقة' && old.bar === 'الأذان بعد ١ دقيقة', JSON.stringify([q.bar, old.bar]));
+    check('adj: the iqama countdown runs from the moved Dhuhr: «إقامة الظهر بعد ٢٠ دقيقة» at 11:42, only the adhan bar before it at 11:40:30',
+      q.bar === 'إقامة الظهر بعد ٢٠ دقيقة' && old.bar === 'أذان الظهر بعد ١ دقيقة', JSON.stringify([q.bar, old.bar]));
     const nxt = await at(p, '2026-10-22', '11:00');
     check('adj: the next prayer card says Dhuhr at the moved time, and how long is left to it', nxt.name === 'الظهر' && nxt.time === '١١:٤٢ ص' && nxt.count === 'بعد ٤٢ دقيقة', JSON.stringify(nxt));
     const row = await p.evaluate(() => { const c = prayerRowCard(); return c.rows.join('') + '|' + c.title; });
@@ -3204,9 +3550,9 @@ for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
     check('adj: at 23:55 the next prayer is the moved Isha, 12:10 ص, in 15 minutes', before.name === 'العشاء' && before.time === '١٢:١٠ ص' && before.count === 'بعد ١٥ دقيقة', JSON.stringify(before));
     const near = "buildPrayers({ Fajr: '04:50', Sunrise: '06:05', Dhuhr: '11:40', Asr: '15:00', Maghrib: '17:45', Isha: '23:30' });";   // +20: Isha at 23:50
     const bar = await at(p, '2026-10-22', '23:40', '00', near), early = await at(p, '2026-10-22', '23:29', '00', near);
-    check('adj: the adhan bar counts to the moved Isha (23:50): ten minutes at 23:40, nothing at 23:29', bar.bar === 'الأذان بعد ١٠ دقائق' && early.bar === '', JSON.stringify([bar.bar, early.bar]));
+    check('adj: the adhan bar counts to the moved Isha (23:50): ten minutes at 23:40, nothing at 23:29', bar.bar === 'أذان العشاء بعد ١٠ دقائق' && early.bar === '', JSON.stringify([bar.bar, early.bar]));
     const fri = await at(p, '2026-10-23', '11:50', '00');   // Friday: Dhuhr 11:40 + 20 = 12:00
-    check("adj: Friday's Dhuhr (+20) is «الجمعة» at 12:00 with its adhan bar and no iqama countdown", fri.name === 'الجمعة' && fri.time === '١٢:٠٠ م' && fri.bar === 'الأذان بعد ١٠ دقائق', JSON.stringify(fri));
+    check("adj: Friday's Dhuhr (+20) is «الجمعة» at 12:00 with its adhan bar and no iqama countdown", fri.name === 'الجمعة' && fri.time === '١٢:٠٠ م' && fri.bar === 'أذان الجمعة بعد ١٠ دقائق', JSON.stringify(fri));
     const friAfter = await at(p, '2026-10-23', '12:05', '00');
     check("adj: after Friday's moved Dhuhr there is no iqama countdown", friAfter.bar === '', JSON.stringify(friAfter));
     await p.evaluate(() => { PRAYERS.length = 0; });
@@ -3241,6 +3587,138 @@ for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
   }
 }
 
+
+// ---- «ساعة ٢٤»: #clock=24 writes every time of day as 24-hour («١٩:٣٠», the hour with two digits, no ص or م); no #clock, or anything but 24,
+// is the 12-hour clock, in exactly the words it had before. Every place that shows a time of day goes through one formatter (fmtTime / timeParts).
+{
+  const TIMES = "buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'19:15'});";
+  const GAME = { idEvent: 'g1', strHomeTeam: 'Al-Hilal', strAwayTeam: 'Al-Nassr', strTimestamp: '2026-10-24T18:16:00Z', strStatus: '1H', intHomeScore: '1', intAwayScore: '0' };
+  const strip = h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
+  // everything one mode shows at the instants given: [what, text], in this order
+  const probe = async (hash) => {
+    const out = [], errs = [];
+    // the clock face at four instants (Riyadh is UTC+3): 07:30, 00:30, 12:05, 18:05
+    for (const [iso, tag] of [['2026-10-24T04:30:00Z', '07:30'], ['2026-10-24T21:30:00Z', '00:30'], ['2026-10-24T09:05:00Z', '12:05'], ['2026-10-24T15:05:00Z', '18:05']]) {
+      const { p, ctx, errors } = await open('tv.html', 'panel=prayers&' + hash, { now: new Date(iso) });
+      out.push(['clock ' + tag, await p.evaluate(() => { const ap = document.getElementById('ck-ap');
+        return [document.getElementById('ck-h').textContent, document.getElementById('ck-m').textContent, document.querySelectorAll('#ck-h i').length,
+                document.querySelectorAll('#ck-m i').length, getComputedStyle(ap).display === 'none' ? '-' : ap.textContent].join('|'); })]);
+      errs.push(...errors); await ctx.close();
+    }
+    const { p, ctx, errors } = await open('tv.html', 'teams=136013&panel=prayers&' + hash);
+    const at = (iso) => p.clock.setFixedTime(new Date(iso));
+    // the prayer panel: the next prayer, then «حان الآن» (between the adhan and the iqama), then an Isha after midnight («24:30»)
+    await p.evaluate(TIMES);
+    const panel = () => p.evaluate(() => { tickPrayer(); return ['prayer-label', 'prayer-name', 'prayer-time'].map(i => document.getElementById(i).textContent).join('|'); });
+    await at('2026-10-24T13:40:00Z'); out.push(['panel next', await panel()]);
+    await at('2026-10-24T08:41:00Z'); out.push(['panel now', await panel()]);
+    await p.evaluate("buildPrayers({Fajr:'04:50',Sunrise:'06:05',Dhuhr:'11:40',Asr:'15:00',Maghrib:'17:45',Isha:'24:30'});");
+    await at('2026-10-24T17:00:00Z'); out.push(['panel Isha after midnight', await panel()]);
+    out.push(['fmtTime edges', await p.evaluate(() => [[0, 0], [0, 5], [11, 59], [12, 0], [13, 7], [23, 59], [24, 30], [25, 5]].map(([h, m]) => fmtTime(h, m)).join(' | '))]);
+    await p.evaluate(TIMES);
+    // the card of the day's times, the row of the five, «يومك»
+    await at('2026-10-24T13:40:00Z');
+    out.push(['card prayers', await p.evaluate(() => prayerRows().map(h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); }).join(' | '))]);
+    out.push(['card prayer row', await p.evaluate(() => prayerRowCard().rows[0].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())]);
+    out.push(['card today', await p.evaluate(() => todayCard().rows.join(' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').match(/الصلاة القادمة[^ ]* [^ ]+ · [^ ]+( [مص])?/)?.[0])]);
+    // the games: the line under an upcoming game, the short form, the block of an upcoming and of a live game, the card's live row, «آخر تحديث»
+    out.push(['matchWhen', await p.evaluate(g => matchWhen(new Date(g.strTimestamp)), GAME)]);
+    out.push(['matchWhenShort', await p.evaluate(g => { const d = new Date('2026-10-23T18:00:00Z'); return matchWhenShort(d, d - 2 * 864e5, false) + ' / ' + matchWhenShort(d, d + 864e5, true); }, GAME)]);
+    out.push(['game upcoming', await p.evaluate(g => { const d = Date.parse(g.strTimestamp); return gameBlock({ ...g, intHomeScore: null, intAwayScore: null }, d - 3 * 864e5).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); }, GAME)]);
+    out.push(['game live', await p.evaluate(g => { const d = Date.parse(g.strTimestamp); return gameBlock(g, d + 600000).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); }, GAME)]);
+    out.push(['live row', await p.evaluate(g => liveWhen(g).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(), GAME)]);
+    out.push(['liveStatus', await p.evaluate(g => liveStatus({ ...g, strStatus: 'NS' }, ar(fmtTime(21, 16))), GAME)]);
+    out.push(['fmtAgo', await p.evaluate(() => fmtAgo(Date.parse('2026-10-24T14:30:00Z')))]);
+    // the events (Formula 1, UFC…): «بدأ» and the day with the time
+    out.push(['event when', await p.evaluate(() => { const t = Date.parse('2026-10-25T12:00:00Z'), now = Date.parse('2026-10-24T09:00:00Z');
+      const a = eventWhen({ t, dateOnly: false }, now), b = eventWhen({ t, dateOnly: false }, t + 60000), c = eventWhen({ t, dateOnly: true }, now);
+      const s = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      return [s(a.text), s(a.row), s(b.text), s(c.text)].join(' | '); })]);
+    // Ramadan: iftar by day, the suhoor (imsak) at night, with the ص or م as its small unit
+    for (const [iso, tag] of [['2027-02-20T12:00:00Z', 'iftar'], ['2027-02-20T20:00:00Z', 'imsak']]) {
+      await p.evaluate(TIMES);
+      await at(iso);
+      out.push(['occasion ' + tag, await p.evaluate(() => { OCC_CACHE = { day: '', val: null }; tickOccasion();
+        return document.getElementById('occ-label').textContent + '|' + document.getElementById('occ-days').innerHTML.replace(/\s+/g, ' ').trim(); })]);
+    }
+    // the hours card: «٩ ص» … «٣ م», or «٠٩:٠٠»; across midnight and noon
+    for (const [iso, from] of [['2026-10-24T18:00:00Z', ['2026-10-24T22', '2026-10-24T23', '2026-10-25T00', '2026-10-25T01', '2026-10-25T02', '2026-10-25T03']],
+                               ['2026-10-24T05:00:00Z', ['2026-10-24T09', '2026-10-24T10', '2026-10-24T11', '2026-10-24T12', '2026-10-24T13', '2026-10-24T14']]]) {
+      await at(iso);
+      out.push(['hours ' + (from[0].endsWith('22') ? 'night' : 'noon'), await p.evaluate(f => { HOURLY = f.map(t => ({ t: t + ':00', code: 0, temp: 30 }));
+        return [...new DOMParser().parseFromString(hourlyRows()[0], 'text/html').querySelectorAll('.hc')].map(c => c.querySelector('b').textContent + ' ' + c.querySelector('i').textContent).join(' | '); }, from)]);
+    }
+    errs.push(...errors); await ctx.close();
+    return { out, errs };
+  };
+  const WANT12 = {   // exactly what the page said before the setting: ص and م, the hour with no zero in front
+    'clock 07:30': '٧|٣٠|1|2|ص', 'clock 00:30': '١٢|٣٠|2|2|ص', 'clock 12:05': '١٢|٠٥|2|2|م', 'clock 18:05': '٦|٠٥|1|2|م',
+    'panel next': 'الصلاة القادمة|المغرب|٥:٤٥ م', 'panel now': 'حان الآن|الظهر|١١:٤٠ ص', 'panel Isha after midnight': 'الصلاة القادمة|العشاء|١٢:٣٠ ص',
+    'fmtTime edges': '١٢:٠٠ ص | ١٢:٠٥ ص | ١١:٥٩ ص | ١٢:٠٠ م | ١:٠٧ م | ١١:٥٩ م | ١٢:٣٠ ص | ١:٠٥ ص',
+    'card prayers': 'الفجر٤:٥٠ ص | الشروق٦:٠٥ ص | الظهر١١:٤٠ ص | العصر٣:٠٠ م | المغرب٥:٤٥ م | العشاء٧:١٥ م',
+    'card prayer row': 'الفجر ٤:٥٠ ص الظهر ١١:٤٠ ص العصر ٣:٠٠ م المغرب ٥:٤٥ م العشاء ٧:١٥ م',
+    'card today': 'الصلاة القادمة المغرب · ٥:٤٥ م',
+    'matchWhen': 'السبت ٢٤ أكتوبر · ٩:١٦ م', 'matchWhenShort': 'الجمعة ٩:٠٠ م / ٢٣ أكتوبر',
+    'game upcoming': 'الهلال × النصر بعد ٣ أيام السبت ٢٤ أكتوبر · ٩:١٦ م', 'game live': null,
+    'live row': 'مباشر · بدأت ٩:١٦ م', 'liveStatus': 'بدأت ٩:١٦ م', 'fmtAgo': 'آخر تحديث ٥:٣٠ م',
+    'event when': 'الأحد · ٣:٠٠ م | الأحد ٣:٠٠ م | مباشر · بدأ ٣:٠٠ م | الأحد',
+    'occasion iftar': 'الإفطار|٥:٤٥ <span class="unit">م</span>', 'occasion imsak': 'الإمساك|٤:٥٠ <span class="unit">ص</span>',
+    'hours night': '١٠ م ٣٠° | ١١ م ٣٠° | ١٢ ص ٣٠° | ١ ص ٣٠° | ٢ ص ٣٠° | ٣ ص ٣٠°', 'hours noon': '٩ ص ٣٠° | ١٠ ص ٣٠° | ١١ ص ٣٠° | ١٢ م ٣٠° | ١ م ٣٠° | ٢ م ٣٠°',
+  };
+  const WANT24 = {   // the same places, 24-hour
+    'clock 07:30': '٠٧|٣٠|2|2|-', 'clock 00:30': '٠٠|٣٠|2|2|-', 'clock 12:05': '١٢|٠٥|2|2|-', 'clock 18:05': '١٨|٠٥|2|2|-',
+    'panel next': 'الصلاة القادمة|المغرب|١٧:٤٥', 'panel now': 'حان الآن|الظهر|١١:٤٠', 'panel Isha after midnight': 'الصلاة القادمة|العشاء|٠٠:٣٠',
+    'fmtTime edges': '٠٠:٠٠ | ٠٠:٠٥ | ١١:٥٩ | ١٢:٠٠ | ١٣:٠٧ | ٢٣:٥٩ | ٠٠:٣٠ | ٠١:٠٥',
+    'card prayers': 'الفجر٠٤:٥٠ | الشروق٠٦:٠٥ | الظهر١١:٤٠ | العصر١٥:٠٠ | المغرب١٧:٤٥ | العشاء١٩:١٥',
+    'card prayer row': 'الفجر ٠٤:٥٠ الظهر ١١:٤٠ العصر ١٥:٠٠ المغرب ١٧:٤٥ العشاء ١٩:١٥',
+    'card today': 'الصلاة القادمة المغرب · ١٧:٤٥',
+    'matchWhen': 'السبت ٢٤ أكتوبر · ٢١:١٦', 'matchWhenShort': 'الجمعة ٢١:٠٠ / ٢٣ أكتوبر',
+    'game upcoming': 'الهلال × النصر بعد ٣ أيام السبت ٢٤ أكتوبر · ٢١:١٦', 'game live': null,
+    'live row': 'مباشر · بدأت ٢١:١٦', 'liveStatus': 'بدأت ٢١:١٦', 'fmtAgo': 'آخر تحديث ١٧:٣٠',
+    'event when': 'الأحد · ١٥:٠٠ | الأحد ١٥:٠٠ | مباشر · بدأ ١٥:٠٠ | الأحد',
+    'occasion iftar': 'الإفطار|١٧:٤٥', 'occasion imsak': 'الإمساك|٠٤:٥٠',
+    'hours night': '٢٢:٠٠ ٣٠° | ٢٣:٠٠ ٣٠° | ٠٠:٠٠ ٣٠° | ٠١:٠٠ ٣٠° | ٠٢:٠٠ ٣٠° | ٠٣:٠٠ ٣٠°', 'hours noon': '٠٩:٠٠ ٣٠° | ١٠:٠٠ ٣٠° | ١١:٠٠ ٣٠° | ١٢:٠٠ ٣٠° | ١٣:٠٠ ٣٠° | ١٤:٠٠ ٣٠°',
+  };
+  const same = {};
+  for (const [hash, on] of [['', false], ['clock=12', false], ['clock=24x', false], ['clock=1', false], ['clock=24', true]]) {
+    const { out, errs } = await probe(hash);
+    same[hash] = JSON.stringify(out);
+    const want = on ? WANT24 : WANT12;
+    check(`clock ${hash || '(none)'}: no script errors`, !errs.length, errs.join('; '));
+    for (const [what, got] of out) {
+      if (want[what] === null) continue;
+      check(`clock ${hash || '(none)'}: ${what} is ${on ? '24-hour' : 'the 12-hour one as before'}`, got === want[what], `${got}   wanted   ${want[what]}`);
+    }
+    // the live game's block: «مباشر · بدأت …» with the score
+    const live = out.find(x => x[0] === 'game live')[1];
+    check(`clock ${hash || '(none)'}: a live game starts «بدأت ${on ? '٢١:١٦' : '٩:١٦ م'}»`, live.includes('بدأت ' + (on ? '٢١:١٦' : '٩:١٦ م')) && (on ? !/[٠-٩] [صم]/.test(live) : !live.includes('٢١:١٦')), live);
+  }
+  check('clock: nothing, 12, 24x and 1 all give the same screen as before (the default)', new Set(['', 'clock=12', 'clock=24x', 'clock=1'].map(h => same[h])).size === 1);
+  // latin digits follow, and the clock keeps one box per digit
+  {
+    const { p, ctx, errors } = await open('tv.html', 'clock=24&digits=latin', { now: new Date('2026-10-24T04:30:00Z') });
+    const r = await p.evaluate(() => ({ t: document.getElementById('ck-h').textContent + ':' + document.getElementById('ck-m').textContent, f: fmtTime(24, 30), g: matchWhen(new Date('2026-10-24T18:16:00Z')) }));
+    check('clock=24 with digits=latin: 07:30, 00:30, 21:16', !errors.length && r.t === '07:30' && r.f === '00:30' && r.g.endsWith('· 21:16'), JSON.stringify(r));
+    await ctx.close();
+  }
+  // the 24-hour clock is not wider than the 12-hour one with its ص: nothing off screen, the hour has two digits beside the minutes
+  for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
+    for (const iso of ['2026-10-24T04:30:00Z', '2026-10-24T20:48:00Z']) {
+      const { p, ctx, errors } = await open('tv.html', 'clock=24&panel=prayers', { width: w, height: h, now: new Date(iso) });
+      const r = await p.evaluate(() => { const c = document.querySelector('.clock').getBoundingClientRect(), b = [...document.querySelectorAll('.clock .d, .clock .sep')].map(e => e.getBoundingClientRect());
+        return { left: c.left, right: c.right, vw: innerWidth, ordered: b.every((x, i) => !i || x.right <= b[i - 1].left + 2 || x.left >= b[i - 1].right - 2), n: document.querySelectorAll('.clock i').length }; });
+      check(`clock=24 ${w}x${h} at ${iso.slice(11, 16)}Z: four boxes, inside the screen`, !errors.length && r.n === 4 && r.left >= 0 && r.right <= r.vw, JSON.stringify(r) + errors.join('; '));
+      await ctx.close();
+    }
+  }
+  // the launcher's card and the screensaver's page both carry it: the same formatter, no second spelling of ص and م
+  {
+    const src = readFileSync(path.join(ROOT, 'src/template.html'), 'utf8');
+    const count = re => (src.match(re) || []).length;
+    check('clock: the page spells ص / م and the 12-hour hour in two places only (timeParts, the clock face)', count(/\? 'ص' : 'م'/g) === 2 && count(/=== 0 \? 12 :/g) === 2, `${count(/\? 'ص' : 'م'/g)} ${count(/=== 0 \? 12 :/g)}`);
+    check('clock: no fmt12 left anywhere in the page', !/fmt12/.test(src));
+  }
+}
 
 // ---- «يُتلى الآن» on the screensaver: while the Quran or a station plays in the launcher (window.UrtvNative.nowPlaying(), mocked here) a small
 // card at the top centre says «يُتلى الآن · سورة الكهف · ماهر المعيقلي», in the style of the card beside the clock; it goes when the answer is empty
@@ -3290,6 +3768,300 @@ for (const [style, w, h] of [['current', 1920, 1080], ['dark1', 1920, 1080], ['g
   await p.evaluate(NP_MOCK({ title: 'سورة الكهف', who: 'x' }) + ' try { nowPlayingTick(); } catch(e) {}');
   check('now playing card: not part of the launcher\'s home cards', !errors.length && await p.evaluate(() => { const n = document.getElementById('np'); return !n || n.hidden || getComputedStyle(n).display === 'none'; }), errors.join('; '));
   await ctx.close();
+}
+
+// ---- fetchT: the deadline covers the body too (stalled headers, stalled body, 429, empty body, invalid JSON)
+{
+  const { createServer } = await import('node:http');
+  const srv = createServer((req, res) => {
+    const h = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+    if (req.url === '/headers') return;                                   // never answers
+    if (req.url === '/body') { res.writeHead(200, h); res.write('{"a":'); return; }   // headers, then silence
+    if (req.url === '/429') { res.writeHead(429, h); return res.end('{"x":1}'); }
+    if (req.url === '/empty') { res.writeHead(200, h); return res.end(); }
+    if (req.url === '/bad') { res.writeHead(200, h); return res.end('<html>'); }
+    res.writeHead(200, h); res.end('{"ok":true}');
+  });
+  await new Promise(r => srv.listen(0, 'localhost', r));
+  const base = 'http://localhost:' + srv.address().port;
+  const { p, ctx } = await open('tv.html', 'panel=prayers', { net: r => { if (r.request().url().startsWith(base)) { r.continue(); return true; } return false; } });
+  const probe = (path, how) => p.evaluate(async ([u, how]) => {
+    const t0 = performance.now();
+    try { const r = await fetchT(u, 700); const v = how === 'text' ? await r.text() : how === 'json' ? await r.json() : null; return { ok: r.ok, status: r.status, v, ms: performance.now() - t0 }; }
+    catch (e) { return { err: e && e.name || String(e), ms: performance.now() - t0 }; }
+  }, [base + path, how]);
+  let r = await probe('/ok', 'json');
+  check('fetchT: a good answer reads as before', r.ok && r.status === 200 && r.v.ok === true, JSON.stringify(r));
+  r = await probe('/body', 'json');
+  check('fetchT: a body that stalls after the headers ends at the deadline', r.err && r.ms > 500 && r.ms < 3000, JSON.stringify(r));
+  r = await probe('/headers', 'json');
+  check('fetchT: headers that never come end at the deadline', r.err && r.ms > 500 && r.ms < 3000, JSON.stringify(r));
+  r = await probe('/429', null);
+  check('fetchT: 429 keeps its status and ok=false', r.ok === false && r.status === 429, JSON.stringify(r));
+  r = await probe('/empty', 'text');
+  check('fetchT: an empty body reads as an empty text', r.ok && r.v === '', JSON.stringify(r));
+  r = await probe('/empty', 'json');
+  check('fetchT: an empty body is a JSON error, not a hang', r.err === 'SyntaxError', JSON.stringify(r));
+  r = await probe('/bad', 'json');
+  check('fetchT: invalid JSON is a JSON error', r.err === 'SyntaxError', JSON.stringify(r));
+  await ctx.close();
+  srv.closeAllConnections?.(); srv.close();
+}
+
+// ---- the refresh start offset: bounded by the task's period (a 2-minute poll starts within 4 minutes at worst), slow tasks keep the spread
+for (const j of [0, 15, 29]) {
+  const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+  await ctx.route(/^https?:/, r => r.abort());
+  await ctx.addInitScript(v => { try { localStorage.setItem('jitter', v); localStorage.setItem('photoIndex', '[]'); } catch (e) {} }, String(j));
+  const p = await ctx.newPage();
+  await p.clock.install({ time: new Date('2026-10-23T12:00:00Z') });
+  await p.goto(page('tv.html') + '#teams=136013&gap=0');
+  await p.evaluate(() => { window.__fast = 0; window.__slow = 0; periodic(() => { window.__fast++; }, 2 * 60000); periodic(() => { window.__slow++; }, 30 * 60000); });
+  await p.clock.runFor(4 * 60000);
+  const fast = await p.evaluate(() => window.__fast);
+  check(`jitter ${j} min: the 2-minute poll has run within 4 minutes`, fast >= 1, 'ran ' + fast);
+  await p.clock.runFor(25 * 60000);   // 29 minutes in: the 30-minute task is not due before its period
+  const slow30 = await p.evaluate(() => window.__slow);
+  await p.clock.runFor(31 * 60000);   // 60 minutes in: late by at most 29 minutes
+  const slow60 = await p.evaluate(() => window.__slow);
+  check(`jitter ${j} min: a 30-minute task keeps its spread (not before 30 min, started by 60 min)`, slow30 === 0 && slow60 >= 1, `${slow30} ${slow60}`);
+  await ctx.close();
+}
+{   // fixtures with a game under way: its live score is asked for at once, not at the next 2-minute tick
+  const asked = [];
+  const start = new Date(Date.now() - 20 * 60000).toISOString().slice(0, 19);
+  const { p, ctx } = await open('tv.html', 'teams=136013&panel=matches', { net: r => {
+    const u = r.request().url();
+    if (!u.includes('thesportsdb.com')) return false;
+    asked.push(u);
+    const body = u.includes('eventsnext.php') ? { events: [{ idEvent: 'live1', strHomeTeam: 'Al-Hilal', strAwayTeam: 'Al-Nassr', strTimestamp: start, strStatus: '1H' }] } : { results: null, events: null };
+    r.fulfill({ json: body, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return true;
+  } });
+  await p.waitForTimeout(1500);
+  check('a game under way after the first fixtures load: its live lookup follows at once', asked.some(u => u.includes('lookupevent.php?id=live1')), asked.join(' '));
+  await ctx.close();
+}
+
+const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','nextprayer','matches','verse','wisdom','adhkar','stocks','tasks','year','smart','today'];
+// ---- «شريط الأسواق»: #mkbar=off hides the markets line, keeps the weather, asks for nothing; the saved list comes back with on
+{
+  const SHOTS = process.env.SHOTS;   // a folder: the pictures of the new options are written there
+  const seen = [];
+  const watch = r => { const u = r.request().url(); if (/chart\/|coingecko|data-markets/.test(u)) seen.push(u); return marketNet({})(r); };
+  for (const [hash, shown, asks] of [['markets=tasi,gold&mkbar=off', false, false], ['markets=tasi,gold&mkbar=on', true, true], ['markets=tasi,gold', true, true],
+                                      ['markets=tasi,gold&mkbar=off&slot=markets', false, true]]) {
+    seen.length = 0;
+    const { p, ctx, errors } = await open('tv.html', hash, { net: watch });
+    await p.waitForTimeout(500);
+    const r = await p.evaluate(() => ({ mk: getComputedStyle(document.querySelector('.mk')).display, wx: getComputedStyle(document.querySelector('.wxline')).display,
+      bar: CONFIG.mkBar, list: CONFIG.markets.join(), up: !!document.getElementById('mk-up') && !document.getElementById('mk-up').hidden }));
+    check(`markets bar «${hash}»: ${shown ? 'shown' : 'hidden, the weather stays'}`, !errors.length && (r.mk !== 'none') === shown && r.wx !== 'none' && r.list === 'tasi,gold', JSON.stringify(r) + errors);
+    check(`markets bar «${hash}»: ${asks ? 'prices are asked for' : 'no market request at all'}`, (seen.length > 0) === asks, seen.join(' '));
+    if (SHOTS && /^markets=tasi,gold&mkbar=(off|on)$/.test(hash)) await p.screenshot({ path: path.join(SHOTS, 'mkbar-' + hash.split('=').pop() + '.png') });
+    await ctx.close();
+  }
+  {   // prices style: the «آخر تحديث» line goes with the bar
+    const { p, ctx } = await open('tv.html', 'markets=tasi,gold&mkstyle=prices&mkbar=off', { net: marketNet({}) });
+    await p.waitForTimeout(500);
+    const r = await p.evaluate(() => ({ mk: getComputedStyle(document.querySelector('.mk')).display, up: getComputedStyle(document.getElementById('mk-up')).display }));
+    check('markets bar off with prices: the line and its update note are both gone', r.mk === 'none' && r.up === 'none', JSON.stringify(r));
+    await ctx.close();
+  }
+  {   // off, then on again: the saved prices come back at once (the bar's key is the list, not the switch)
+    const { p, ctx } = await open('tv.html', 'markets=tasi,gold&mkbar=on', { net: marketNet({}) });
+    await p.waitForTimeout(500);
+    const kept = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('mk:')).join());
+    check('markets bar: the saved prices are keyed by the list only', kept === 'mk:tasi,gold', kept);
+    await ctx.close();
+  }
+}
+
+// ---- «حجم الساعة»: #clocksize=large|medium|small, every card, three screen sizes: nothing overlaps or goes off screen
+{
+  const SHOTS = process.env.SHOTS;
+  const sizes = { large: null, medium: 'medium', small: 'small' };
+  const widths = {};
+  for (const [w, h] of [[960, 540], [1280, 720], [1920, 1080]]) {
+    for (const [name, v] of Object.entries(sizes)) {
+      const bad = [], errs = [];
+      for (const panel of [...CARD_KINDS_TEST, 'none']) {
+        const { p, ctx, errors } = await open('tv.html', `teams=136013&panel=${panel}&slot=weather` + (v ? '&clocksize=' + v : ''), { width: w, height: h, now: HOME_NOW });
+        if (SAMPLE[panel]) await p.evaluate(`(${SAMPLE[panel]})(); renderPanel(false);`);
+        const r = await p.evaluate(() => {
+          const box = e => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width }; };
+          const vis = s => { const e = document.querySelector(s); return e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width ? e : null; };
+          const parts = ['.top', '.clock', '.week', '.bottom'].map(s => [s, vis(s)]).filter(x => x[1]).map(x => [x[0], box(x[1])]);
+          const hit = [];
+          for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+            const a = parts[i][1], b = parts[j][1];
+            if (a.l < b.r - 1 && b.l < a.r - 1 && a.t < b.b - 1 && b.t < a.b - 1) hit.push(parts[i][0] + '×' + parts[j][0]);
+          }
+          const off = parts.filter(([, b]) => b.l < -1 || b.r > innerWidth + 1 || b.b > innerHeight + 1).map(x => x[0]);
+          const latin = (document.querySelector('.stage').innerText.match(/[0-9]+/g) || []).filter(x => x !== '500');
+          return { hit, off, latin, cw: box(document.querySelector('.clock')).w };
+        });
+        if (r.hit.length || r.off.length || r.latin.length) bad.push(panel + ':' + JSON.stringify(r));
+        if (panel === 'prayers') widths[w + name] = r.cw;
+        if (SHOTS && panel === 'prayers' && w === 1920) await p.screenshot({ path: path.join(SHOTS, `clocksize-${name}.png`) });
+        errs.push(...errors);
+        await ctx.close();
+      }
+      check(`clock ${name} at ${w}x${h}: every card, nothing overlaps or goes off screen, Arabic digits`, !bad.length && !errs.length, bad.join(' | ') + errs.join('; '));
+    }
+    check(`clock sizes at ${w}x${h}: large > medium > small`, widths[w + 'large'] > widths[w + 'medium'] && widths[w + 'medium'] > widths[w + 'small'], JSON.stringify(widths));
+  }
+  const { p, ctx } = await open('tv.html', 'clocksize=huge');
+  check('clocksize: anything else is large', await p.evaluate(() => CONFIG.clockSize === 'large' && !/ck-/.test(document.documentElement.className)));
+  await ctx.close();
+}
+
+// ---- the weather at the top left: the condition and the dust are two facts, and the source with the reading's age is a small line
+{
+  const NOW = new Date('2026-10-22T13:40:00Z');
+  const wxNet = (pm, ageState) => r => {
+    const u = r.request().url();
+    const ok = body => { r.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) }); return true; };
+    if (/air-quality-api/.test(u)) return ageState.off ? (r.abort(), true) : ok({ current: { pm10: pm, dust: 0 } });
+    if (/api\.open-meteo\.com\/v1\/forecast/.test(u)) return ageState.off ? (r.abort(), true)
+      : ok({ current: { temperature_2m: 38, weather_code: 2 }, daily: { time: ['2026-10-22'], temperature_2m_max: [41], temperature_2m_min: [27], weather_code: [2] } });
+    return false;
+  };
+  const wxRead = p => p.evaluate(() => ({ d: document.getElementById('wx-desc').textContent, dust: document.getElementById('wx-dust').textContent,
+    src: document.getElementById('wx-src').textContent, line: document.querySelector('.wxline').innerText.replace(/\s+/g, ' ').trim() }));
+  for (const [pm, dust, why] of [[60, '', 'clean air: the condition alone'], [200, 'غبار', 'dust: beside the condition'], [450, 'غبار كثيف', 'heavy dust: beside the condition']]) {
+    const { p, ctx, errors } = await open('tv.html', '', { net: wxNet(pm, {}), now: NOW });
+    await p.waitForTimeout(600);
+    const r = await wxRead(p);
+    check(`weather ${why}`, !errors.length && r.d === 'غائم جزئياً' && r.dust === dust, JSON.stringify(r) + errors);
+    check(`weather ${pm}: the source and «الآن» under the city`, r.src === 'Open-Meteo · الآن', r.src);
+    await ctx.close();
+  }
+  {   // the age counts on, with no request; older than three hours it all goes
+    const { p, ctx } = await open('tv.html', '', { net: wxNet(0, {}), now: NOW });
+    await p.waitForTimeout(600);
+    const at = min => p.evaluate(m => { WX.at = Date.now() - m * 60000; wxExpire(); wxSource(); }, min);   // the page's clock is fixed: the reading gets older instead
+    await at(15);
+    const a = await wxRead(p);
+    await at(75);
+    const b = await wxRead(p);
+    await at(190);
+    const c = await wxRead(p);
+    check('weather age: «قبل ١٥ د», then hours, then nothing once the reading is stale',
+      a.src === 'Open-Meteo · قبل ١٥ د' && /^Open-Meteo · قبل [٠-٩]+ س$/.test(b.src) && c.src === '' && c.d === '', JSON.stringify([a.src, b.src, c.src]));
+    await ctx.close();
+  }
+  for (const [w, h] of [[960, 540], [1280, 720], [1920, 1080]]) {
+    for (const hash of ['', 'markets=tasi,aramco,gold,btc&mkstyle=prices', 'mkbar=off']) {
+      const { p, ctx } = await open('tv.html', hash, { width: w, height: h, net: wxNet(450, {}), now: NOW });
+      await p.waitForTimeout(600);
+      const r = await p.evaluate(() => {
+        const b = s => document.querySelector(s).getBoundingClientRect(), m = b('.markets'), d = b('.dates'), c = b('.clock');
+        const off = [...document.querySelectorAll('.markets *')].filter(e => { const x = e.getBoundingClientRect(); return x.width && (x.left < -1 || x.right > innerWidth + 1); }).map(e => e.id || e.className);
+        return { off, overDates: m.right > d.left - 8 && m.bottom > d.top && m.top < d.bottom, overClock: m.bottom > c.top && m.left < c.right && m.right > c.left && m.top < c.bottom,
+          src: document.getElementById('wx-src').getBoundingClientRect().height > 0, line: document.querySelector('.wxline').innerText.replace(/\s+/g, ' ').trim() };
+      });
+      check(`weather with dust and its source at ${w}x${h} (${hash || 'default'}): fits, clear of the date and the clock`, !r.off.length && !r.overDates && !r.overClock && r.src && /غائم جزئياً/.test(r.line) && /غبار كثيف/.test(r.line), JSON.stringify(r));
+      if (process.env.SHOTS && w === 1920 && hash === '') await p.screenshot({ path: path.join(process.env.SHOTS, 'weather-dust-source.png'), clip: { x: 0, y: 0, width: 700, height: 220 } });
+      await ctx.close();
+    }
+  }
+}
+
+// ---- F32: a change of look only (card style, the card's place, the clock's size) offline keeps the games already shown;
+// a change of what the saved words are made of (the digits, the teams) does not reuse them
+{
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  await ctx.route(/^https?:/, r => r.abort());
+  const p = await ctx.newPage();
+  await p.goto(page('tv.html') + '#gap=0&teams=136013&cardstyle=current');
+  await p.waitForTimeout(800);
+  await p.evaluate(() => { document.getElementById('match-row').innerHTML = '<div class="saved-match">SAVED</div>'; MATCH_OK_AT = Date.now(); saveSnap(); });
+  const row = async hash => {
+    await carry(p);
+    await p.goto(page('tv.html') + '#' + hash);
+    await p.reload();
+    await p.waitForTimeout(1200);
+    return p.evaluate(() => document.getElementById('match-row').textContent.trim());
+  };
+  for (const [hash, want, why] of [['gap=0&teams=136013&cardstyle=glass1', 'SAVED', 'the card style changed'],
+      ['gap=0&teams=136013&cardstyle=dark3&clocksize=small', 'SAVED', 'the style and the clock size changed'],
+      ['gap=0&teams=136013&panel=verse&adhanbar=0&yearstrip=1', 'SAVED', 'the card, the bar and the strip changed'],
+      ['gap=0&teams=136013&digits=latin', null, 'the digits changed (the saved words would have the wrong ones)'],
+      ['gap=0&teams=136137', null, 'another team']]) {
+    const got = await row(hash);
+    check(`offline, ${why}: ${want ? 'the games stay' : 'the old row is not reused'}`, want ? got === want : got !== 'SAVED', got);
+  }
+  await ctx.close();
+}
+
+// ---- «فرق التاريخ الهجري»: #hijri=-2..2 moves every Hijri date by whole days (moon-sighting countries); 0, nothing or a bad value changes nothing
+{
+  const line = async (hash, now, tzId) => {
+    const { p, ctx, errors } = await open('tv.html', hash, { now: new Date(now), tzId });
+    const t = await p.evaluate(() => document.getElementById('hijri').textContent);
+    const cfg = await p.evaluate(() => CONFIG.hijri);
+    await ctx.close();
+    return { t, cfg, errors };
+  };
+  const NOW = '2026-10-23T09:00:00Z';   // الجمعة ١٢ جمادى الأولى ١٤٤٨ (Riyadh)
+  const base = await line('tz=Asia%2FRiyadh', NOW);
+  check('hijri offset 0 (nothing in the settings): exactly the text it always had', base.t === 'الجمعة، ١٢ جمادى الأولى ١٤٤٨ هـ' && base.cfg === 0 && !base.errors.length, base.t + ' ' + base.errors.join('; '));
+  for (const [v, day] of [['-2', '١٠'], ['-1', '١١'], ['1', '١٣'], ['2', '١٤']]) {
+    const r = await line('tz=Asia%2FRiyadh&hijri=' + v, NOW);
+    check(`hijri=${v}: the Hijri day moves to ${day}, today's weekday stays`, r.t === `الجمعة، ${day} جمادى الأولى ١٤٤٨ هـ` && r.cfg === +v && !r.errors.length, r.t);
+  }
+  const same = await line('tz=Asia%2FRiyadh&hijri=0', NOW);
+  check('hijri=0 is the same text as no setting, byte for byte', same.t === base.t, same.t);
+  for (const bad of ['3', '-3', 'x', '1.5', '', '+1', '١', '10']) {
+    const r = await line('tz=Asia%2FRiyadh&hijri=' + encodeURIComponent(bad), NOW);
+    check(`hijri=${JSON.stringify(bad)}: a bad value is 0 (the text as always)`, r.t === base.t && r.cfg === 0, r.t + ' ' + r.cfg);
+  }
+  const latin = await line('tz=Asia%2FRiyadh&digits=latin&hijri=-1', NOW);
+  check('hijri=-1 with digits=latin: 11 in Latin digits', /، 11 /.test(latin.t) && !/[٠-٩]/.test(latin.t), latin.t);
+  // the end of a month and the year: 30 Shaaban + 1 is 1 Ramadan; the year changes with the month
+  const mo = await line('tz=Asia%2FRiyadh&hijri=2', '2027-02-07T09:00:00Z');
+  check('hijri=2 over a month end: 30 شعبان + 2 is 2 رمضان', mo.t === 'الأحد، ٢ رمضان ١٤٤٨ هـ', mo.t);
+  // the city's day, not the computer's: Cairo is already on 23 October at 21:30 UTC though the computer (New York) is on 22nd
+  const cairo = await line('tz=Africa%2FCairo&hijri=1', '2026-10-22T21:30:00Z', 'America/New_York');
+  check('hijri=1 in Cairo near midnight: the city\'s day (23 Oct = 12) plus one is 13', cairo.t === 'الجمعة، ١٣ جمادى الأولى ١٤٤٨ هـ', cairo.t);
+  const cairo0 = await line('tz=Africa%2FCairo', '2026-10-22T21:30:00Z', 'America/New_York');
+  check('Cairo near midnight without the setting: 12', cairo0.t === 'الجمعة، ١٢ جمادى الأولى ١٤٤٨ هـ', cairo0.t);
+
+  // a spring-forward at midnight (Cairo, 30 April 2027 00:00 -> 01:00): +1 in the last hour before it is still the next day's date
+  const sf0 = await line('tz=Africa%2FCairo', '2027-04-30T10:00:00Z'), sf1 = await line('tz=Africa%2FCairo&hijri=1', '2027-04-29T21:30:00Z');
+  const sfBase = await line('tz=Africa%2FCairo', '2027-04-29T21:30:00Z');
+  const noWd = t => t.replace(/^[^،]*،\s*/, '');
+  check('hijri=1 at 23:30 on the evening before Cairo\'s spring-forward: the next day\'s date, not the same one',
+    noWd(sf1.t) === noWd(sf0.t) && noWd(sf1.t) !== noWd(sfBase.t), `${sf1.t} | next day ${sf0.t} | today ${sfBase.t}`);
+
+  // Ramadan: month 9 decides the iftar mode, the occasion card and the fasting suggestion; the Isha delay never follows the offset (prayer times are the calendar's own)
+  const rama = async (hash, now) => {
+    const { p, ctx, errors } = await open('tv.html', 'city=الرياض&lat=24.7136&lon=46.6753&tz=Asia%2FRiyadh&' + hash, { now: new Date(now) });
+    const r = await p.evaluate(() => {
+      const t = computePrayers(), [mh, mm] = t.Maghrib.split(':').map(Number), [ih, im] = t.Isha.split(':').map(Number);
+      const oc = occasionNow(), f = fastingNext(new Date());
+      return { month: hijriMonthNow(), gap: (ih * 60 + im) - (mh * 60 + mm), oc: oc && { name: oc.o.name, today: !!oc.today, days: oc.days }, fast: f && { key: f.key, days: f.days } };
+    });
+    await ctx.close();
+    return { ...r, errors };
+  };
+  const E = '2027-02-07T09:00:00Z', F = '2027-03-09T09:00:00Z';   // 30 Shaaban 1448, and 1 Shawwal 1448 (Riyadh)
+  const a0 = await rama('', E), a1 = await rama('hijri=1', E), a2 = await rama('hijri=-1', E);
+  check('before Ramadan, no setting: month 8, Isha 90 minutes after Maghrib, Ramadan only tomorrow', a0.month === 8 && a0.gap === 90 && !a0.oc.today && a0.fast.days === 1 && !a0.errors.length, JSON.stringify(a0));
+  check('hijri=1 on 30 Shaaban: Ramadan looks begun (month 9, the occasion and the fasting day), but Isha stays 90: no prayer time moves',
+    a1.month === 9 && a1.gap === 90 && a1.oc.name === 'رمضان' && a1.oc.today && a1.fast.key === 'ramadan' && a1.fast.days === 0, JSON.stringify(a1));
+  check('hijri=-1 on 30 Shaaban: still Shaaban, Isha 90', a2.month === 8 && a2.gap === 90, JSON.stringify(a2));
+  const b0 = await rama('', F), b1 = await rama('hijri=-1', F);
+  check('1 Shawwal, no setting: the Ramadan Isha is over (90)', b0.month === 10 && b0.gap === 90, JSON.stringify(b0));
+  check('hijri=-1 on 1 Shawwal: Ramadan still looks on (month 9), Isha stays 90 (the real calendar says Shawwal)', b1.month === 9 && b1.gap === 90 && b1.oc.name === 'رمضان' && b1.oc.today, JSON.stringify(b1));
+  const G = '2027-03-08T09:00:00Z';   // the last day of Ramadan 1448: the real month is 9, Isha +120, with any offset
+  const g0 = await rama('', G), g1 = await rama('hijri=1', G);
+  check('the last day of Ramadan: Isha +120 with and without hijri=1 (while the shown month turns to 10)', g0.month === 9 && g0.gap === 120 && g1.month === 10 && g1.gap === 120, JSON.stringify([g0, g1]));
+  // the occasion that follows the year: one day earlier with +1, the same one
+  const c0 = await rama('', NOW), c1 = await rama('hijri=1', NOW), c2 = await rama('hijri=-2', NOW);
+  check('occasion countdown: hijri=1 is one day less, hijri=-2 two days more, the same occasion',
+    c0.oc.name === c1.oc.name && c0.oc.name === c2.oc.name && c0.oc.days - c1.oc.days === 1 && c2.oc.days - c0.oc.days === 2, JSON.stringify([c0.oc, c1.oc, c2.oc]));
 }
 
 await browser.close();

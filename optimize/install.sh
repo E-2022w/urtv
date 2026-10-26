@@ -7,14 +7,15 @@
 #                                  github.com/truefedex/tv-bro) and SmartTube (YouTube without ads,
 #                                  github.com/yuliskov/SmartTube), the build that fits the TV's processor
 #   optimize/install.sh all        both (saver, launcher)
-# The first install of the screensaver replaces an APK signed with another key: uninstall the old one first
-# (pm uninstall sa.urtv.screensaver) — this script does that only if a plain install fails.
+# An APK signed with another key cannot replace the installed one: this script stops with a !! line and never uninstalls
+# by itself (that deletes the app's settings); the agent asks the person first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PY="${PY:-optimize/venv/bin/python}"
 REL=https://github.com/tshi-dev/UrTV/releases/download/${APK_TAG:-apk-latest}   # APK_TAG=v3.N: that numbered build
 what="${1:?usage: optimize/install.sh saver|launcher|extras|all}"
 case "$what" in saver|launcher|extras|all) ;; *) echo "usage: optimize/install.sh saver|launcher|extras|all" >&2; exit 2;; esac
+. optimize/home-journal.sh   # the journal of the home switch (what the switch changed, to undo it after a restart)
 failed=0   # an extra that did not install: the rest are still tried, then run.sh must not count the step as done
 
 # curl with up to 3 tries. A Windows curl (Schannel) that can't reach the certificate revocation server fails every
@@ -56,13 +57,16 @@ pm_install() {   # $1 file name in /data/local/tmp, $2 package: pm's answer. A b
   # minute, which ADB takes for a dead TV: it runs in the background on the TV and is polled (tv.py --bg).
   # Some operator TVs have a system service that removes apps installed from ADB seconds later; installed with the
   # Play Store as the installer they stay. So: still there after 3 s? If not, install once more that way, and say so.
+  # tv.py --bg exits with pm's own exit code (1 on a failed install): that is not a failure of this function. A TV that
+  # never answered gives no output at all: NO_ANSWER, which the callers turn into a clear line.
   local out
-  out=$("$PY" -I optimize/tv.py --bg install "pm install -r /data/local/tmp/$1")
+  out=$(TV_JOB_LIMIT_S=1200 "$PY" -I optimize/tv.py --bg install "pm install -r /data/local/tmp/$1") || true
+  if [ -z "$out" ]; then printf '%s\n' NO_ANSWER; return 0; fi
   if grep -q Success <<< "$out"; then
     sleep 3
     if ! "$PY" -I optimize/tv.py "pm list packages $2" | tr -d '\r' | grep -qx "package:$2"; then
       echo "$2 was removed right after the install (a service of this TV does that to apps installed over ADB): installing it again as if from the Play Store." >&2
-      out=$("$PY" -I optimize/tv.py --bg install "pm install -i com.android.vending -r /data/local/tmp/$1")
+      out=$(TV_JOB_LIMIT_S=1200 "$PY" -I optimize/tv.py --bg install "pm install -i com.android.vending -r /data/local/tmp/$1") || true
       sleep 3
       if grep -q Success <<< "$out" && ! "$PY" -I optimize/tv.py "pm list packages $2" | tr -d '\r' | grep -qx "package:$2"; then
         out="Failure [$2 is removed by this TV right after every install]"
@@ -90,15 +94,17 @@ push_install() {   # $1 apk name, $2 package
     "$PY" -I optimize/tv.py "settings put global $VERIFIER 0" > /dev/null || true
     out=$(pm_install "$1" "$2")
   fi
+  if [ "$out" = NO_ANSWER ]; then
+    echo "!! The TV stopped answering while $1 was installing (some TVs take minutes and drop ADB meanwhile). Wait a minute, check the TV is on and on Wi-Fi, then run the same command again: an install that finished is found and not repeated."
+    exit 1
+  fi
   if ! grep -q Success <<< "$out"; then
-    # only a signing-key clash justifies removing the installed app (and its settings); anything else stops here
+    # an app with this name but another signature (a copy built by hand, or from another source) cannot be updated in place,
+    # and removing it deletes its settings, tasks and own adhan: never done here, the person decides
     if grep -qE 'UPDATE_INCOMPATIBLE|signatures do not match' <<< "$out"; then
-      echo "An older $2 signed with another key is installed: removing it, then installing again."
-      # removing the home app while the stock one is off would leave the TV with no home at all
-      [ "$2" = sa.urtv.home ] && "$PY" -I optimize/tv.py "pm enable ${STOCK%%/*}" > /dev/null || true
-      "$PY" -I optimize/tv.py "pm uninstall $2" || true
-      out=$(pm_install "$1" "$2")
-      grep -q Success <<< "$out" || { echo "!! Install of $1 failed again: $out"; exit 1; }
+      echo "!! $2 is already installed, signed with another key (a copy built by hand or from another source), so ours cannot replace it. Nothing was removed."
+      echo "   Removing it (pm uninstall $2) would delete its settings, tasks and own adhan, and Android cannot keep them across signatures. Ask the person first, in Arabic: «عندك نسخة من التطبيق غير الرسمية، لو أزلناها تنحذف إعداداتها ومهامها. أزيلها وأثبّت الرسمية (تتحدّث وحدها بعدين)؟». Only after a yes: pm uninstall $2, then the same command again."
+      exit 1
     else
       echo "!! Install of $1 failed: $out"
       if grep -q INSTALL_FAILED_VERIFICATION_FAILURE <<< "$out"; then
@@ -143,13 +149,20 @@ for abi in [a for a in sys.argv[2].split(",") if a] + ["universal", ""]:
   elif ! curl_get -fsSL -o "optimize/$name" "$url"; then echo "!! Could not download $url"; failed=1; return 0; fi
   "$PY" -I optimize/tv.py --push-b64 "optimize/$name" "/data/local/tmp/$name"
   out=$(pm_install "$name" "$2")
-  "$PY" -I optimize/tv.py "rm -f /data/local/tmp/$name" > /dev/null
+  "$PY" -I optimize/tv.py "rm -f /data/local/tmp/$name" > /dev/null 2>&1 || true
   rm -f "optimize/$name"
-  if grep -q Success <<< "$out"; then echo "Installed $name"
+  if [ "$out" = NO_ANSWER ]; then
+    # an extra never stops the setup: the install may even have finished while the TV was silent
+    if "$PY" -I optimize/tv.py "pm list packages $2" 2> /dev/null | tr -d '\r' | grep -qx "package:$2"; then echo "Installed $name (the TV was slow to answer)"
+    else echo "!! $2 was skipped: the TV stopped answering while it installed (slow Wi-Fi or a slow set). The rest of the setup goes on; to add it later: optimize/install.sh extras"; fi
+  elif grep -q Success <<< "$out"; then echo "Installed $name"
   elif grep -qE 'UPDATE_INCOMPATIBLE|signatures do not match' <<< "$out"; then
     echo "$2 is already installed from somewhere else: left as it is (with its settings)."   # never removed
   else echo "!! Install of $name failed: $out"; failed=1; fi
 }
+
+# A home switch that a restart cut off (journal says «switching», Home is not ours, no marker) is undone first.
+[ "$what" = extras ] || jrecover || exit 1
 
 if [ "$what" = extras ]; then
   from_github truefedex/tv-bro com.phlox.tvwebbrowser 'tvbro-[0-9.]+-generic-geckoExcluded\.apk'   # light: the TV's WebView
@@ -159,13 +172,26 @@ fi
 
 if [ "$what" = saver ] || [ "$what" = all ]; then
   push_install urtv-screensaver.apk sa.urtv.screensaver
-  printf '%s\n' \
-    "settings put secure screensaver_enabled 1" \
-    "settings put secure screensaver_components sa.urtv.screensaver/.ScreenDream" \
-    "settings put secure screensaver_default_component sa.urtv.screensaver/.ScreenDream" \
-    "am start --activity-clear-task -n sa.urtv.screensaver/.SettingsActivity" \
-    | "$PY" -I optimize/tv.py --batch
-  echo "Screensaver installed and selected. Its settings screen is open on the TV."
+  # a WebView older than 80 cannot run the page: the TV keeps its own screensaver (ours is installed, not selected) until
+  # the person updates «Android System WebView»; precheck.sh held exits 4 then, and says nothing when it cannot tell
+  held=0; PY="$PY" optimize/precheck.sh held > /dev/null 2>&1 || { [ "$?" != 4 ] || held=1; }
+  if [ "$held" = 1 ]; then
+    echo "!! The screensaver is installed but NOT switched on: this TV's WebView is older than 80 and the page would not run, so the TV keeps its own screensaver. Update «Android System WebView» in the Play Store (optimize/precheck.sh webview-store opens it), then run optimize/install.sh saver again."
+  else
+    printf '%s\n' \
+      "settings put secure screensaver_enabled 1" \
+      "settings put secure screensaver_components sa.urtv.screensaver/.ScreenDream" \
+      "settings put secure screensaver_default_component sa.urtv.screensaver/.ScreenDream" \
+      "am start --activity-clear-task -n sa.urtv.screensaver/.SettingsActivity" \
+      | "$PY" -I optimize/tv.py --batch
+    # read back: some firmware keeps its own screensaver whatever is written (reset.sh puts back what backup.sh recorded)
+    got=$("$PY" -I optimize/tv.py "settings get secure screensaver_components" 2> /dev/null | tr -d '\r' | tail -n 1) || got=""
+    case "$got" in
+      *sa.urtv.screensaver/*) ;;
+      *) echo "!! screensaver_components: this TV did not take our screensaver (it says ${got:-nothing}); choose it in the TV's own settings (Settings, Device Preferences, Screen saver)" ;;
+    esac
+    echo "Screensaver installed and selected. Its settings screen is open on the TV."
+  fi
 fi
 
 if [ "$what" = launcher ] || [ "$what" = all ]; then
@@ -214,23 +240,61 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
   # Returns 0: the new home is on screen and the switch is disarmed; 1: tv.py failed (connection lost);
   # 2: Home did not open the new launcher; 3: the safety switch fired first.
   switch_home() {
-    local top res stepout ours=no _ wraith=no cmds
+    local top res stepout ours=no _ wraith=no cmds alive disabled
     if [ "${1:-}" != verify ]; then
       # before anything is changed: does the wizard answer Home, and can it go without taking the Wi-Fi with it?
       if wraith_answers_home; then
+        # owned: the switch goes on with the wizard left on (the HOME role and set-home-activity choose ours, and the
+        # check below and the safety switch catch a TV where it still wins). Stopping here blocked 13 of 39 setups on
+        # 51b9680, and forgetting the network did not help on half of them.
         case "$(wifi_owner)" in
-          owned) return 5 ;;
+          owned) echo "The setup wizard answers Home and owns the saved Wi-Fi network: it is left on (the network stays), and the switch goes on without turning it off." ;;
           other) wraith=listed ;;
           *) echo "The setup wizard answers Home, but the TV did not say who owns its saved Wi-Fi: the wizard is left on, so the network is not lost." ;;
         esac
       fi
       # 2. Arm the safety switch on the TV: it restores the stock home in 300 s unless we confirm (slow ADB needs time).
+      #    It carries a nonce (a marker of an older switch cannot disarm this one), and it must show it is alive before
+      #    anything is changed. The journal records what the switch changes, to undo it if the TV restarts in the middle.
+      local old_nonce role wiz stk
+      old_nonce=$(jget nonce)
+      NONCE="$(date +%s)-$$-$RANDOM"
+      role=$("$PY" -I optimize/tv.py "cmd role get-role-holders --user 0 android.app.role.HOME 2> /dev/null" 2> /dev/null | tr -d '\r' | sed -n 1p) || role=""
+      grep -qE '^[A-Za-z0-9_.]+$' <<< "$role" || role=""
+      # a second run starts with ours as the holder: the earlier journal still knows who it was before
+      if [ "$role" = sa.urtv.home ] || [ -z "$role" ]; then role=$(jget role_holder_before); fi
+      wiz=absent; stk=absent
+      if disabled=$("$PY" -I optimize/tv.py "pm list packages -d" 2> /dev/null | tr -d '\r'); then
+        grep -qx "package:$WRAITH" <<< "$disabled" && wiz=disabled || wiz=enabled
+        grep -qx "package:${STOCK%%/*}" <<< "$disabled" && stk=disabled || stk=enabled
+      fi
+      [ "$wiz" != disabled ] || [ "$(jget wizard_before)" != enabled ] || wiz=enabled   # we turned it off in an earlier run
+      [ "$stk" != disabled ] || [ "$(jget stock_before)" != enabled ] || stk=enabled
+      jwrite "$NONCE" switching "$STOCK" "$role" "$wiz" "$stk"
       "$PY" -I optimize/tv.py --push-b64 optimize/deadman.sh /data/local/tmp/deadman.sh || return 1
       printf '%s\n' \
-        "rm -f /data/local/tmp/home_ok" \
-        "nohup sh /data/local/tmp/deadman.sh $STOCK 300 > /dev/null 2>&1 &" \
-        | "$PY" -I optimize/tv.py --batch || return 1
-      echo "Safety switch armed: the stock home comes back by itself in 5 minutes unless the new home works."
+        "${old_nonce:+touch /data/local/tmp/home_ok.$old_nonce}" \
+        "rm -f /data/local/tmp/home_ok /data/local/tmp/home_ok.$NONCE" \
+        "for f in /data/local/tmp/home_ok.* /data/local/tmp/home_pid.* /data/local/tmp/home_hb.*; do case \$f in *.$NONCE|*.${old_nonce:-none}|*'*') ;; *) rm -f \$f ;; esac; done" \
+        "if command -v setsid > /dev/null 2>&1; then setsid sh /data/local/tmp/deadman.sh $STOCK 300 $NONCE < /dev/null > /dev/null 2>&1 & else nohup sh /data/local/tmp/deadman.sh $STOCK 300 $NONCE < /dev/null > /dev/null 2>&1 & fi" \
+        | grep . | "$PY" -I optimize/tv.py --batch || return 1
+      # alive = its pid answers and its heartbeat is under 25 s old (it writes one every 10 s)
+      alive=no
+      for _ in 1 2 3 4 5; do
+        sleep 2
+        res=$("$PY" -I optimize/tv.py "p=\$(cat /data/local/tmp/home_pid.$NONCE 2> /dev/null); h=\$(cat /data/local/tmp/home_hb.$NONCE 2> /dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2> /dev/null && [ -n \"\$h\" ] && [ \$((\$(date +%s) - h)) -le 25 ]; then echo WATCHDOG_ALIVE; else echo WATCHDOG_DEAD; fi") || return 1
+        if grep -q WATCHDOG_ALIVE <<< "$res"; then alive=yes; break; fi
+      done
+      if [ "$alive" = yes ]; then
+        echo "Safety switch armed and running: the stock home comes back by itself in 5 minutes unless the new home works."
+      else
+        # Seen on a TCL with Android 14: a background job started over ADB ends the moment the ADB session closes (setsid and nohup
+        # did not help), so there is no safety switch on the TV itself. The switch is still checked and undone from this computer
+        # (below), and the journal restores it on the next run if this computer stops in the middle. Not an error: it is the
+        # protection every earlier install had.
+        jsafety unavailable
+        echo "This TV ends background jobs when the ADB session closes, so there is no safety switch on the TV itself. The switch is checked and undone from this computer, and the journal restores it on the next run."
+      fi
 
       # 3. Switch: the HOME role (Android 10+; the classic set-home-activity for older sets and as a backup), then
       #    the setup app off, then the stock home (this order avoided the black screen).
@@ -248,7 +312,8 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       if grep -A2 -F "\$ pm disable-user --user 0 ${STOCK%%/*}" <<< "$stepout" | grep -qi 'illegal'; then
         printf '%s\n' "cmd role add-role-holder --user 0 android.app.role.HOME ${STOCK%%/*}" \
           "cmd package set-home-activity --user 0 $STOCK" "pm enable com.google.android.tungsten.setupwraith" \
-          "touch /data/local/tmp/home_ok" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null || true
+          "touch /data/local/tmp/home_ok.$NONCE" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null \
+          && jstate restored   # only when it went through: else the journal stays «switching» and the next run redoes it
         return 4
       fi
     fi
@@ -261,14 +326,31 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       # it took Home back after the switch: now it has to go (only if that cannot cost the Wi-Fi)
       if [ "$wraith" = no ] && wraith_answers_home; then wraith=listed; wraith_off || true; fi
     done
-    [ "$ours" = yes ] || return 2
-    "$PY" -I optimize/tv.py "touch /data/local/tmp/home_ok" || return 1
+    if [ "$ours" != yes ]; then
+      # the stock home back now, not in 5 minutes: a restart in between would stop the safety switch and could leave the
+      # wizard's recovery screen as Home (seen on a TCL G07 with the stock home off and the wizard on)
+      printf '%s\n' "pm enable ${STOCK%%/*}" "pm enable $WRAITH" \
+        "cmd role add-role-holder --user 0 android.app.role.HOME ${STOCK%%/*}" "cmd package set-home-activity --user 0 $STOCK" \
+        "touch /data/local/tmp/home_ok.$NONCE" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null \
+        && jstate restored   # (see above: not «restored» if the batch did not go through)
+      return 2
+    fi
+    "$PY" -I optimize/tv.py "touch /data/local/tmp/home_ok.$NONCE" || return 1
     # the switch may have fired already if ADB was very slow: then the stock home is back
     res=$("$PY" -I optimize/tv.py "cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN") || return 1
-    grep -q sa.urtv.home <<< "$res" || return 3
+    grep -q sa.urtv.home <<< "$res" || { jstate restored; return 3; }   # the safety switch fired: the stock home is back
+    jstate done
   }
 
-  rc=0; switch_home || rc=$?
+
+  # Home is already ours and no switch was cut off: there is nothing to switch and nothing to protect (no safety switch, no journal)
+  already=no
+  res=$("$PY" -I optimize/tv.py "cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN" 2> /dev/null) || res=""
+  if grep -q sa.urtv.home <<< "$res" && [ "$(jget state)" != switching ]; then
+    already=yes
+    echo "Home is already the new launcher: nothing to switch, so no safety switch is started."
+  fi
+  rc=0; if [ "$already" = yes ]; then :; else switch_home || rc=$?; fi
   if [ "$rc" = 1 ]; then   # ADB dropped: wait for the TV, see what Home is now, and go on or start the switch again
     back=no
     for _ in $(seq 36); do   # every 10 s, about 6 minutes
@@ -293,15 +375,13 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
   home_skipped=0
   case "$rc" in
     0) ;;
-    5) echo "!! The setup wizard of this TV answers Home and owns its saved Wi-Fi network: turning it off would delete the network and take the TV off Wi-Fi. Nothing was changed."
-       echo "   Tell the person, in Arabic: «على التلفزيون: الإعدادات ← الشبكة والإنترنت، انسَ شبكة الواي فاي (Forget) واتصل فيها من جديد، وقلّي «تم»» (the network then belongs to the system, not the wizard). Then the same command."
-       exit 1 ;;
     4) home_skipped=1
        echo "Home switch skipped: this TV refuses to turn its own home screen off («This command is illegal», seen on a Nokia Streaming Box 8000). It keeps its own home; the stock home is back as it was. The screensaver and the rest of the setup work without it."
        mkdir -p "${URTV_RUN_DIR:-optimize/run}"
        echo "Home switch: skipped, this TV refuses to turn its own home screen off" > "${URTV_RUN_DIR:-optimize/run}/home-skipped.txt" ;;
-    2) echo "!! Home did not open the new launcher. Leave the TV alone: the stock home returns within 5 minutes."
+    2) echo "!! Home did not open the new launcher. The stock home was put back."
        echo "   Some TCL firmware pins Home to the stock launcher; on those sets keep the stock home."
+       echo "   If the line above said the setup wizard owns the Wi-Fi, keep the stock home too: never turn the wizard off by hand."
        exit 1 ;;
     *) echo "!! The safety switch put the stock home back (ADB was too slow). Nothing is broken: run the same command again."
        exit 1 ;;
@@ -320,8 +400,8 @@ fi
 # and share.sh agree. (Only when the report exists; no report, nothing to correct.)
 if [ "$what" != extras ] && [ -f "${URTV_RUN_DIR:-optimize/run}/report.md" ]; then
   rep="${URTV_RUN_DIR:-optimize/run}/report.md"
-  vs=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.screensaver 2> /dev/null | grep -m1 versionName" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vs=""
-  vh=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.home 2> /dev/null | grep -m1 versionName" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vh=""
+  vs=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.screensaver 2> /dev/null | grep versionName | sed -n 1p" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vs=""
+  vh=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.home 2> /dev/null | grep versionName | sed -n 1p" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vh=""
   if [ -n "$vs$vh" ]; then
     line="Versions: screensaver ${vs:-none}, home ${vh:-none}"
     if grep -q '^Versions:' "$rep"; then

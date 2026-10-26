@@ -92,6 +92,8 @@ final class Prefs {
 
     // how the markets are shown (#mkstyle=; arrows is what it always showed)
     static final String[][] MK_STYLES = {{"arrows", "الاتجاه فقط ▲▼"}, {"prices", "السعر والنسبة"}};
+    // the size of the screensaver's clock (sent as #clocksize=; large is what it always was)
+    static final String[][] CLOCK_SIZES = {{"large", "كبيرة"}, {"medium", "متوسطة"}, {"small", "صغيرة"}};
     // what the bottom-left slot shows (sent to the page as #slot=; matches is what it always showed)
     static final String[][] SLOTS = {{"matches", "المباريات"}, {"weather", "الطقس"}, {"fasting", "الصيام"},
         {"countdown", "عدّ تنازلي"}, {"markets", "الأسواق"}, {"none", "بدون"}};
@@ -124,7 +126,7 @@ final class Prefs {
         sp.edit().putString("cityName", name).putString("cityLat", lat).putString("cityLon", lon).putString("cityTz", tz).apply();
     }
 
-    /** The time zone the page shows: Asia/Riyadh for a built-in (Saudi) city; a place of your own gets the one given
+    /** The time zone the page shows: Asia/Riyadh for a built-in Saudi city, the country's own for a Gulf one; a place of your own gets the one given
      *  with it, else the TV's own. */
     String cityTz() {
         String own = sp.getString("cityTz", "");
@@ -132,9 +134,13 @@ final class Prefs {
         String[] c = city();
         for (Cities.Region r : Cities.REGIONS)
             for (String[] x : r.cities)
-                if (x[0].equals(c[0]) && x[1].equals(c[1]) && x[2].equals(c[2])) return TZ;
+                if (x[0].equals(c[0]) && x[1].equals(c[1]) && x[2].equals(c[2])) return x.length > 3 ? x[3] : TZ;   // the Gulf cities carry their own
         return java.util.TimeZone.getDefault().getID();
     }
+
+    /** «طريقة الحساب» (default auto = the country's own): PrayerMethod.AUTO or JAFARI; sent as #pm=jafari only for the latter. */
+    String prayerMethod() { return PrayerMethod.JAFARI.equals(sp.getString("prayerMethod", "auto")) ? PrayerMethod.JAFARI : PrayerMethod.AUTO; }
+    void setPrayerMethod(String v) { sp.edit().putString("prayerMethod", v).apply(); }
 
     static final int MAX_TEAMS = 20;
     /** Whole leagues followed (#leagues=): the page downloads one small file for each, every 30 minutes. */
@@ -185,15 +191,21 @@ final class Prefs {
 
     // The card beside the clock: value sent to the page (#panel=), Arabic label
     static final String[][] PANELS = {
-        {"shows", "جديد المسلسلات"}, {"prayers", "مواقيت الصلاة اليوم"}, {"forecast", "طقس الأيام القادمة"}, {"hourly", "طقس الساعات القادمة"}, {"prayerrow", "الصلوات في صف"},
+        {"shows", "جديد المسلسلات"}, {"prayers", "مواقيت الصلاة اليوم"}, {"forecast", "طقس الأيام القادمة"}, {"hourly", "طقس الساعات القادمة"}, {"prayerrow", "الصلوات في صف"}, {"nextprayer", "الصلاة القادمة"},
         {"matches", "مباريات فرقك القادمة"}, {"verse", "آية أو حديث اليوم"}, {"wisdom", "حكمة اليوم"},
         {"adhkar", "أذكار الصباح والمساء"}, {"stocks", "الأسهم"}, {"tasks", "المهام"}, {"year", "السنة"},
         {"smart", "البطاقة الذكية"}, {"today", "يومك"},
         {"none", "لا شيء"},
     };
 
-    /** Older builds had an on/off switch for the card; off becomes "none", otherwise the verse card. */
-    String panel() { return sp.getString("panel", sp.getBoolean("showWeek", true) ? "verse" : "none"); }
+    /** Cards for the home screen only: on the screensaver the always-on panel at the bottom right already says the same. */
+    static boolean homeOnly(String v) { return "nextprayer".equals(v); }
+
+    /** Older builds had an on/off switch for the card; off becomes "none", otherwise the verse card. A home-only card is the verse there. */
+    String panel() {
+        String v = sp.getString("panel", sp.getBoolean("showWeek", true) ? "verse" : "none");
+        return homeOnly(v) ? "verse" : v;
+    }
     void setPanel(String v) { sp.edit().putString("panel", v).apply(); }
 
     // One plain line about each card, in the words of docs/FEATURES.md (tests/check.py compares them): the pickers show it under the name
@@ -203,6 +215,7 @@ final class Prefs {
         {"forecast", "خمسة أيام"},
         {"hourly", "الست ساعات الجاية بالساعة والأيقونة والحرارة، وقمر بعد الغروب"},
         {"prayerrow", "الخمس صلوات في صف واحد، والجاية مضيئة"},
+        {"nextprayer", "سطر واحد: الصلاة الجاية ووقتها وكم باقي لها"},
         {"matches", "مباريات الأسبوع ونتائج آخر يوم لفرقك، وكل مباراة بسطر واحد"},
         {"verse", "آية يوم، وحديث صحيح من الكتب الستة اليوم اللي بعده، ومعه مصدره"},
         {"wisdom", "مثل أو قول عربي معروف مع مصدره"},
@@ -250,6 +263,14 @@ final class Prefs {
     String minRating() { return sp.getString("minRating", "7"); }
     void setMinRating(String v) { sp.edit().putString("minRating", v).apply(); }
 
+    /** «فرق التاريخ الهجري» (default 0): the Hijri day moved by -2..+2 days, for moon-sighting countries (HijriOffset); sent to the page only when not 0 */
+    int hijriOffset() { return HijriOffset.decode(sp.getInt("hijriOffset", 0)); }
+    void setHijriOffset(int v) { sp.edit().putInt("hijriOffset", HijriOffset.decode(v)).apply(); }
+
+    /** «ساعة ٢٤» (default off: the 12-hour clock as always); sent to the page as #clock=24, and only while on. */
+    boolean clock24() { return sp.getBoolean("clock24", false); }
+    void setClock24(boolean v) { sp.edit().putBoolean("clock24", v).apply(); }
+
     String digits() { return sp.getString("digits", "hindi"); }
     void setDigits(String v) { sp.edit().putString("digits", v).apply(); }
 
@@ -275,6 +296,22 @@ final class Prefs {
         return v.isEmpty() ? java.util.Arrays.asList(DEFAULT_MARKETS.split(",")) : v;
     }
     void setMarkets(List<String> v) { setList("markets", v); }
+
+    /** The markets line at the top (default on); off hides it and the page asks for nothing for it. The list above is kept. */
+    boolean marketsOn() { return sp.getBoolean("marketsOn", true); }
+    void setMarketsOn(boolean v) { sp.edit().putBoolean("marketsOn", v).apply(); }
+
+    String clockSize() {
+        String v = sp.getString("clockSize", "large");
+        for (String[] c : CLOCK_SIZES) if (c[0].equals(v)) return v;
+        return "large";
+    }
+    void setClockSize(String v) { sp.edit().putString("clockSize", v).apply(); }
+
+    static String clockSizeLabel(String v) {
+        for (String[] c : CLOCK_SIZES) if (c[0].equals(v)) return c[1];
+        return CLOCK_SIZES[0][1];
+    }
 
     String mkStyle() { return sp.getString("mkStyle", "arrows"); }
     void setMkStyle(String v) { sp.edit().putString("mkStyle", v).apply(); }
@@ -338,6 +375,24 @@ final class Prefs {
     /** The page reads its settings from the fragment; a ?query fails on file:// in WebView. */
     String dashboardUrl(Context c) { return pageBase(c) + "#" + fragment(); }
 
+    /** Was a city ever set, from the settings or the computer? Until then it is the install's Riyadh (Location.note). */
+    boolean cityChosen() { return sp.contains("cityName"); }
+
+    /** The first-run note is due now (Location.noteDue): the settings' top row and the screensaver's start ask the same. */
+    boolean cityNoteDue() { return Location.noteDue(FreshInstall.is(ctx), cityChosen(), sp.getInt("cityNoteShown", 0)); }
+
+    /**
+     * The screensaver's page, with #citynote=1 while the note is due. start: a real start of the screensaver (ScreenDream attached),
+     * the only thing that counts toward its three; the settings' preview shows it without counting. Not in fragment(): the launcher's
+     * cards never show it.
+     */
+    String screenUrl(Context c, boolean start) {
+        String url = dashboardUrl(c);
+        if (!cityNoteDue()) return url;
+        if (start) sp.edit().putInt("cityNoteShown", sp.getInt("cityNoteShown", 0) + 1).apply();
+        return url + "&citynote=1";
+    }
+
     /**
      * The page for a preview in the settings: the card alone (#widget=1) with the current settings, but this card in this style.
      * panel= and cardstyle= are taken out of the fragment first: the page reads the first one it finds.
@@ -380,13 +435,18 @@ final class Prefs {
             + "&minrating=" + minRating()
             + "&photos=" + photoMinutes()
             + "&digits=" + digits()
+            + ClockSetting.fragment(clock24())
             + "&cardstyle=" + cardStyle()
             + "&adhanbar=" + (adhanBar() ? "1" : "0")
             + "&yearstrip=" + (yearStrip() ? "1" : "0")
             + PrayerAdj.fragment(prayerAdjOn(), prayerAdj())
+            + PrayerMethod.fragment(prayerMethod())
+            + HijriOffset.fragment(hijriOffset())
             + "&national=" + national()
             + "&markets=" + join(markets(), ",")
             + "&mkstyle=" + mkStyle()
+            + "&mkbar=" + (marketsOn() ? "on" : "off")
+            + "&clocksize=" + clockSize()
             + "&stocks=" + join(stocks(), ",")
             + "&slot=" + slot()
             + "&cd=" + countdownDate()
@@ -411,16 +471,23 @@ final class Prefs {
     static final int MAX_TASKS = 12;
     static final int TASK_CHARS = 60;
 
-    /** One task kept on the TV. */
-    static final class Task {
-        final String text;
-        final boolean done;
-        final long at;
-        Task(String text, boolean done, long at) { this.text = text; this.done = done; this.at = at; }
-    }
+    /** Changes to the list are read-modify-write of one JSON string: one at a time, from the provider, the receiver and the screens alike. */
+    private static final Object TASKS_LOCK = new Object();
 
-    /** All tasks, oldest first (a JSON array of {t, done, at}); the number a person sees is the position + 1. */
-    List<Task> tasks() { return parseTasks(sp.getString("tasks", "[]")); }
+    /**
+     * All tasks, oldest first (a JSON array of {t, done, at, id}); the number a person sees is the position + 1, but a change names the
+     * task by its id. A list saved before ids existed is given them here, once, with everything else as it was.
+     */
+    List<Task> tasks() {
+        synchronized (TASKS_LOCK) {
+            List<Task> v = parseTasks(sp.getString("tasks", "[]"));
+            if (TaskList.needsIds(v)) {
+                v = TaskList.withIds(v, sp.getLong("taskSeq", 0));
+                setTasks(v);
+            }
+            return v;
+        }
+    }
 
     /** The tasks of the saved JSON; an entry that is not a task is skipped, not the whole list lost. */
     static List<Task> parseTasks(String json) {
@@ -430,7 +497,7 @@ final class Prefs {
             for (int k = 0; k < a.length(); k++) {
                 try {
                     JSONObject o = a.getJSONObject(k);
-                    out.add(new Task(o.getString("t"), o.optBoolean("done"), o.optLong("at")));
+                    out.add(new Task(o.getString("t"), o.optBoolean("done"), o.optLong("at"), o.optLong("id")));
                 } catch (JSONException bad) {
                     // one entry that is not a task is skipped; the others are kept (the list is saved back whole)
                 }
@@ -444,9 +511,9 @@ final class Prefs {
     private void setTasks(List<Task> v) {
         JSONArray a = new JSONArray();
         try {
-            for (Task t : v) a.put(new JSONObject().put("t", t.text).put("done", t.done).put("at", t.at));
+            for (Task t : v) a.put(new JSONObject().put("t", t.text).put("done", t.done).put("at", t.at).put("id", t.id));
         } catch (JSONException ignored) { }
-        sp.edit().putString("tasks", a.toString()).apply();
+        sp.edit().putString("tasks", a.toString()).putLong("taskSeq", TaskList.lastId(v, sp.getLong("taskSeq", 0))).apply();
     }
 
     /** Trimmed, one line, at most TASK_CHARS characters; "" when nothing is left. */
@@ -460,37 +527,52 @@ final class Prefs {
     String addTask(String raw) {
         String text = cleanTask(raw);
         if (text.isEmpty()) return "the task is empty";
-        List<Task> v = tasks();
-        while (v.size() >= MAX_TASKS) {
-            int old = -1;
-            for (int k = 0; k < v.size() && old < 0; k++) if (v.get(k).done) old = k;
-            if (old < 0) return "at most " + MAX_TASKS + " tasks; finish or delete one first";
-            v.remove(old);
+        synchronized (TASKS_LOCK) {
+            List<Task> v = tasks();
+            List<Task> out = TaskList.add(v, text, System.currentTimeMillis(), TaskList.lastId(v, sp.getLong("taskSeq", 0)) + 1, MAX_TASKS);
+            if (out == null) return "at most " + MAX_TASKS + " tasks; finish or delete one first";
+            setTasks(out);
+            return null;
         }
-        v.add(new Task(text, false, System.currentTimeMillis()));
-        setTasks(v);
-        return null;
     }
 
-    /** n counts from 1; false when there is no such task */
+    /** n counts from 1 (what `list` shows); false when there is no such task */
     boolean doneTask(int n) {
-        List<Task> v = tasks();
-        if (n < 1 || n > v.size()) return false;
-        Task t = v.get(n - 1);
-        v.set(n - 1, new Task(t.text, true, t.at));
-        setTasks(v);
-        return true;
+        synchronized (TASKS_LOCK) {
+            List<Task> v = tasks();
+            return n >= 1 && n <= v.size() && doneTaskId(v.get(n - 1).id);
+        }
     }
 
     boolean deleteTask(int n) {
-        List<Task> v = tasks();
-        if (n < 1 || n > v.size()) return false;
-        v.remove(n - 1);
-        setTasks(v);
-        return true;
+        synchronized (TASKS_LOCK) {
+            List<Task> v = tasks();
+            return n >= 1 && n <= v.size() && deleteTaskId(v.get(n - 1).id);
+        }
     }
 
-    void clearTasks() { sp.edit().remove("tasks").apply(); }
+    /** the task with this id is marked done; false when it is gone */
+    boolean doneTaskId(long id) {
+        synchronized (TASKS_LOCK) {
+            List<Task> out = TaskList.markDone(tasks(), id);
+            if (out == null) return false;
+            setTasks(out);
+            return true;
+        }
+    }
+
+    boolean deleteTaskId(long id) {
+        synchronized (TASKS_LOCK) {
+            List<Task> out = TaskList.remove(tasks(), id);
+            if (out == null) return false;
+            setTasks(out);
+            return true;
+        }
+    }
+
+    void clearTasks() {
+        synchronized (TASKS_LOCK) { sp.edit().remove("tasks").apply(); }
+    }
 
     /** "&tasks=" and the open tasks, one per line, URL-encoded; nothing when there are none (the page shows «لا مهام اليوم»). */
     private String openTasksParam() {

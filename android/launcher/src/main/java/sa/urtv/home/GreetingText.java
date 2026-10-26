@@ -46,30 +46,37 @@ final class GreetingText {
         }
     }
 
-    /** PM10 or dust in µg/m³ from which the air is «غبار», and «غبار كثيف»: the page's thresholds (it overrides its condition word) */
+    /** PM10 or dust in µg/m³ from which the air is «غبار», and «غبار كثيف»: the page's thresholds (told beside its condition word) */
     static final double DUST = 150, HEAVY_DUST = 400;
 
-    /** The sky's word, or «غبار» / «غبار كثيف» when the dust level (the larger of Open-Meteo's pm10 and dust) says so. */
-    static String skyWord(int code, double dust) {
-        if (dust >= HEAVY_DUST) return "غبار كثيف";
-        if (dust >= DUST) return "غبار";
-        return sky(code);
+    /**
+     * The dust level to tell, given the visibility in metres (negative: not known). The air-quality model can put thousands of µg/m³
+     * of dust over Riyadh for days under a clear sky with 20 km of visibility (issue #29): at 10 km or more no dust is told, under
+     * 3 km it may be «كثيف», in between at most «غبار». Unknown visibility: the level as it is (the page does the same: dustWord).
+     */
+    static double seenDust(double dust, double vis) {
+        if (vis < 0) return dust;
+        if (vis >= 10000) return 0;
+        return vis < 3000 ? dust : Math.min(dust, HEAVY_DUST - 1);
     }
 
-    /** «سماء صافية في الرياض، ٣١°» (no «·» beside a digit: the TV's font draws it as ٠); a code we have no word for gives just «الرياض، ٣١°»; dust (0 when unknown) takes the word over. */
+    /** The sky's word, and beside it (not instead of it) «وغبار» / «وغبار كثيف» when the dust level (the larger of Open-Meteo's pm10 and dust) says so. */
+    static String skyWord(int code, double dust) {
+        String sky = sky(code);
+        String d = dust >= HEAVY_DUST ? "غبار كثيف" : dust >= DUST ? "غبار" : "";
+        return d.isEmpty() ? sky : sky.isEmpty() ? d : sky + " و" + d;
+    }
+
+    /** «سماء صافية في الرياض، ٣١°» (no «·» beside a digit: the TV's font draws it as ٠); a code we have no word for gives just «الرياض، ٣١°»; dust (0 when unknown) is told beside the sky: «سماء صافية وغبار في الرياض، ٣٥°». */
     static String weather(int code, double dust, String city, double temp, boolean latin) {
         String sky = skyWord(code, dust);
         String place = sky.isEmpty() ? city : sky + " في " + city;
         return place + "، " + digits(Math.round(temp) + "°", latin);
     }
 
-    /** «الغروب ٥:٥٧ م» from "17:57". */
-    static String sun(String label, String hhmm, boolean latin) {
-        int colon = hhmm.indexOf(':');
-        int h = Integer.parseInt(hhmm.substring(0, colon));
-        String m = hhmm.substring(colon + 1, colon + 3);
-        int h12 = h % 12 == 0 ? 12 : h % 12;
-        return label + " " + digits(h12 + ":" + m, latin) + " " + (h < 12 ? "ص" : "م");
+    /** «الغروب ٥:٥٧ م» from "17:57" (on a 24-hour clock «الغروب ١٧:٥٧»). */
+    static String sun(String label, String hhmm, boolean latin, boolean clock24) {
+        return label + " " + ClockText.time(hhmm, clock24, latin);
     }
 
     /** Arabic-Indic digits (as the page's #digits=hindi), or the Latin ones left alone. */

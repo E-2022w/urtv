@@ -21,10 +21,11 @@ import java.util.Locale;
  *   am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.SET
  *       [--es city 'الرس'] [--es lat 25.86 --es lon 43.49 --es tz Asia/Kuwait]   (tz is needed for a place that is not in the list) [--es teams '136013:Al-Hilal,150643:Al-Zulfi']
  *       [--es panel prayers] [--es home_panel prayers,hourly,verse|none] [--es greeting on|off] [--es adhanbar on|off] [--es yearstrip on|off] [--es minrating 7] [--es genres Drama,Comedy] [--es langs English]
- *       [--es photos 30] [--es idle 10] [--es digits hindi|latin]
+ *       [--es photos 30] [--es idle 10] [--es digits hindi|latin] [--es hijrioffset -2..2] [--es clock24 on|off]
  *       [--es cardstyle current|dark1|glass1|dark3|glass3] [--es national auto|off]
- *       [--es markets tasi,gold,btc] [--es mkstyle arrows|prices] [--es stocks 2222,1120,AAPL]
+ *       [--es markets tasi,gold,btc] [--es mkstyle arrows|prices] [--es mkbar on|off] [--es clocksize large|medium|small] [--es stocks 2222,1120,AAPL]
  *       [--es leagues 'Saudi-Arabian Pro League,NBA']
+ *       [--es prayermethod jafari|auto]   («طريقة الحساب»: auto = the country's own, jafari = Shia Ithna-Ashari)
  *       [--es prayeradj on|off] [--es adj_fajr +2 --es adj_dhuhr 0 --es adj_asr 0 --es adj_maghrib -1 --es adj_isha 0]   («تعديل وقت الصلاة», minutes -20..20)
  *       [--es slot matches|weather|fasting|countdown|markets|none] [--es countdown 2026-12-01|clear --es cdname 'رحلة الصيف']
  *   am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.UPDATE
@@ -44,8 +45,10 @@ import java.util.Locale;
  * "clear"; cdname = its name (up to 40 characters).
  * national = auto (as always from now: the quiet green look on National Day, 21-25 September, and Founding Day, 20-24 February) or off.
  * cardstyle = the look of the card beside the clock (Prefs.CARD_STYLES; current is the plain card).
+ * mkbar = the markets line at the top, on (default) or off (the weather stays; the list is kept); clocksize = the screensaver's clock.
  * markets = up to four of Prefs.MARKETS at the top left, in order; mkstyle = arrows only (as always) or the price and the day's change.
  * stocks = the watchlist of the stocks card (panel stocks): up to Prefs.MAX_STOCKS Tadawul codes (4 digits) or US tickers.
+ * clock24 = «ساعة ٢٤»: every time of day as 24-hour (on) or 12-hour with ص and م (off, the default; ClockSetting).
  * digits = hindi (١٢٣, as always) or latin (123). photos = minutes between background photos (Prefs.PHOTO_MINUTES). idle = minutes before the TV starts the
  * screensaver (Prefs.IDLE_MINUTES): this is the system's screen_off_timeout, which a receiver (it runs as this
  * app, not as the shell) may write only when the app holds WRITE_SETTINGS; otherwise it says so and
@@ -118,6 +121,7 @@ public class SaverReceiver extends BroadcastReceiver {
                 // a place of your own has its own time zone, and a missing one would be guessed (the TV's, Riyadh's): ask for it
                 if (tz == null && !inList(name))
                     return "error: add the time zone for a place that is not in the list, e.g. --es tz Asia/Riyadh or Asia/Kuwait";
+                if (tz == null) tz = CityMatch.zoneOf(name);   // a list name with coordinates of its own: its country's zone, not the TV's
                 city = new String[] {name, lat, lon};
             } else {
                 for (Cities.Region r : Cities.REGIONS) for (String[] x : r.cities) if (x[0].equals(name)) city = x;
@@ -153,6 +157,7 @@ public class SaverReceiver extends BroadcastReceiver {
             if (teams.size() > Prefs.MAX_TEAMS) return "error: at most " + Prefs.MAX_TEAMS + " teams";
         }
         String panel = i.getStringExtra("panel"), home = i.getStringExtra("home_panel");
+        if (panel != null && Prefs.homeOnly(panel)) return "error: " + panel + " is a home-screen card only (the screensaver's panel already shows it): optimize/saver.sh home-card " + panel;
         if (panel != null && !isPanel(panel)) return "error: panel is one of " + panels();
         List<String> homeCards = null;
         if (home != null) {
@@ -171,6 +176,9 @@ public class SaverReceiver extends BroadcastReceiver {
         String prayerAdj = i.getStringExtra("prayeradj");
         if (prayerAdj != null && !"on".equals(prayerAdj) && !"off".equals(prayerAdj))
             return "error: prayeradj is one of on off";
+        String prayerMethod = i.getStringExtra("prayermethod");
+        if (prayerMethod != null && PrayerMethod.parse(prayerMethod) == null)
+            return "error: prayermethod is one of jafari auto";
         int[] adj = null;   // «تعديل وقت الصلاة»: each given prayer is a whole number of minutes, −20..20; the rest stay
         for (int k = 0; k < PrayerAdj.COUNT; k++) {
             String v = i.getStringExtra("adj_" + PrayerAdj.KEYS[k]);
@@ -179,6 +187,12 @@ public class SaverReceiver extends BroadcastReceiver {
             if (n == null) return "error: " + PrayerAdj.KEYS[k] + " is a whole number of minutes from -" + PrayerAdj.MAX + " to " + PrayerAdj.MAX + ", like +2 or -1";
             if (adj == null) adj = p.prayerAdj();
             adj[k] = n;
+        }
+        Integer hijriOffset = null;   // «فرق التاريخ الهجري»: a whole number of days, -2..2
+        String hijriExtra = i.getStringExtra("hijrioffset");
+        if (hijriExtra != null) {
+            hijriOffset = HijriOffset.parse(hijriExtra.trim());
+            if (hijriOffset == null) return "error: hijrioffset is a whole number of days from -" + HijriOffset.MAX + " to " + HijriOffset.MAX + ", like -1 or +1 (0 = Umm al-Qura as it is)";
         }
         String yearStrip = i.getStringExtra("yearstrip");
         if (yearStrip != null && !"on".equals(yearStrip) && !"off".equals(yearStrip))
@@ -195,6 +209,9 @@ public class SaverReceiver extends BroadcastReceiver {
         String digits = i.getStringExtra("digits");
         if (digits != null && !isChoice(Prefs.DIGITS, digits))
             return "error: digits is one of " + choices(Prefs.DIGITS);
+        String clock24 = i.getStringExtra("clock24");
+        if (clock24 != null && !ClockSetting.valid(clock24))
+            return "error: clock24 is one of on off";
         String national = i.getStringExtra("national");
         if (national != null && !isChoice(Prefs.NATIONAL, national))
             return "error: national is one of " + choices(Prefs.NATIONAL);
@@ -204,6 +221,12 @@ public class SaverReceiver extends BroadcastReceiver {
         String mkStyle = i.getStringExtra("mkstyle");
         if (mkStyle != null && !isChoice(Prefs.MK_STYLES, mkStyle))
             return "error: mkstyle is one of " + choices(Prefs.MK_STYLES);
+        String mkBar = i.getStringExtra("mkbar");
+        if (mkBar != null && !"on".equals(mkBar) && !"off".equals(mkBar))
+            return "error: mkbar is one of on off";
+        String clockSize = i.getStringExtra("clocksize");
+        if (clockSize != null && !isChoice(Prefs.CLOCK_SIZES, clockSize))
+            return "error: clocksize is one of " + choices(Prefs.CLOCK_SIZES);
         List<String> markets = codes(i.getStringExtra("markets"), Prefs.MARKETS);
         if (markets != null) {
             if (markets.contains(null)) return "error: markets are " + names(Prefs.MARKETS);
@@ -272,15 +295,20 @@ public class SaverReceiver extends BroadcastReceiver {
         if (greeting != null) p.setGreeting("on".equals(greeting));
         if (adhanBar != null) p.setAdhanBar("on".equals(adhanBar));
         if (yearStrip != null) p.setYearStrip("on".equals(yearStrip));
+        if (prayerMethod != null) p.setPrayerMethod(PrayerMethod.parse(prayerMethod));
         if (adj != null) p.setPrayerAdj(adj);
+        if (hijriOffset != null) p.setHijriOffset(hijriOffset);
         if (prayerAdj != null) p.setPrayerAdjOn("on".equals(prayerAdj));
         if (rating != null) p.setMinRating(rating);
         if (photos != null) p.setPhotoMinutes(photos);
         if (digits != null) p.setDigits(digits);
+        if (clock24 != null) p.setClock24("on".equals(clock24));
         if (national != null) p.setNational(national);
         if (cardStyle != null) p.setCardStyle(cardStyle);
         if (mkStyle != null) p.setMkStyle(mkStyle);
         if (markets != null) p.setMarkets(markets);
+        if (mkBar != null) p.setMarketsOn("on".equals(mkBar));
+        if (clockSize != null) p.setClockSize(clockSize);
         if (stocks != null) p.setStocks(stocks);
         if (slot != null) p.setSlot(slot);
         if (cd != null) {
@@ -370,7 +398,7 @@ public class SaverReceiver extends BroadcastReceiver {
     }
 
     private static String listing(Prefs p) {
-        List<Prefs.Task> all = p.tasks();
+        List<Task> all = p.tasks();
         if (all.isEmpty()) return "no tasks";
         StringBuilder b = new StringBuilder();
         for (int k = 0; k < all.size(); k++)
@@ -389,13 +417,16 @@ public class SaverReceiver extends BroadcastReceiver {
             + "\ngreeting: " + (p.greeting() ? "on" : "off")
             + "\nadhanbar: " + (p.adhanBar() ? "on" : "off")
             + "\nyearstrip: " + (p.yearStrip() ? "on" : "off")
+            + "\nprayermethod: " + p.prayerMethod()
             + "\nprayeradj: " + (p.prayerAdjOn() ? "on" : "off") + " " + PrayerAdj.describe(p.prayerAdj())
+            + "\nhijrioffset: " + HijriOffset.describe(p.hijriOffset())
             + "\nminrating: " + p.minRating()
             + "\nphotos: " + p.photoMinutes()
             + "\ndigits: " + p.digits()
+            + "\nclock24: " + ClockSetting.describe(p.clock24())
             + "\nnational: " + p.national()
             + "\ncardstyle: " + p.cardStyle()
-            + "\nmarkets: " + Prefs.join(p.markets(), ",") + "\nmkstyle: " + p.mkStyle()
+            + "\nmarkets: " + (p.marketsOn() ? "" : "off ") + Prefs.join(p.markets(), ",") + "\nclocksize: " + p.clockSize() + "\nmkstyle: " + p.mkStyle()
             + "\nstocks: " + Prefs.join(p.stocks(), ",")
             + "\nslot: " + p.slot()
             + "\ncountdown: " + (p.countdownDate().isEmpty() ? "none" : p.countdownDate() + " " + p.countdownName())

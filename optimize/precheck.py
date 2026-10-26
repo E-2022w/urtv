@@ -4,8 +4,10 @@ optimize/precheck.sh: `tv.py --batch` blocks) and prints what to tell the person
 
     precheck.py check < answers     the full check: prints lines, exits 0 (go on) or 3 (not an Android TV: stop)
     precheck.py report < answers    the two lines for report.md: «Device: …» and «WebView: …»
+    precheck.py held < answers      exit 4 when the WebView is known and older than 80 (the TV's own screensaver stays
+                                    selected until it is updated), else 0; prints nothing
 
-The screensaver page uses `?.` and `??`, which need Chrome/WebView 80 or newer. One report had «system WebView is 66» and
+The screensaver page's CSS (clamp, gap, inset) needs Chrome/WebView 80 or newer. One report had «system WebView is 66» and
 the page never ran. The page is not rewritten for old WebViews: the person updates «Android System WebView» instead.
 """
 import re
@@ -80,7 +82,7 @@ def lines(answers):
                          "no": "!! not an Android TV (no android.software.leanback)"}[k]),
            f"WebView: {wv}" + (f" ({pkg})" if pkg else "")]
     if ver is not None and ver < MIN_WEBVIEW:
-        out[1] = (f"!! WebView: system WebView is {ver} ({pkg}): the screensaver page needs {MIN_WEBVIEW} or newer (it uses ?. and ??) and "
+        out[1] = (f"!! WebView: system WebView is {ver} ({pkg}): the screensaver page needs {MIN_WEBVIEW} or newer (its CSS needs clamp, gap and inset) and "
                   "would not run. Update «Android System WebView» from the Play Store")
     return out
 
@@ -103,7 +105,8 @@ def check(answers):
         print(lines(answers)[1])
         print("   Tell the person, in Arabic: «" + WEBVIEW_AR.format(v=ver) + "»")
         print("   `optimize/precheck.sh webview-store` opens its Play Store page on the TV; after the update run `optimize/precheck.sh` again.")
-        print("   The setup goes on meanwhile (the report keeps this line until the WebView is new enough).")
+        print("   The setup goes on meanwhile, but the TV keeps its own screensaver selected (ours is installed, not switched on) "
+              "until the WebView is new enough; the report keeps this line until then.")
     else:
         print(f"WebView: {ver} (needs {MIN_WEBVIEW} or newer): ok")
     return 0
@@ -115,6 +118,9 @@ def main(argv):
     if argv[:1] == ["report"]:
         print("\n".join(lines(answers)))
         return 0
+    if argv[:1] == ["held"]:
+        _, ver = webview(answers)
+        return 4 if ver is not None and ver < MIN_WEBVIEW else 0
     return check(answers)
 
 

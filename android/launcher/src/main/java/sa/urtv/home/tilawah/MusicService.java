@@ -10,6 +10,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.MediaPlayer;
@@ -20,6 +22,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.PowerManager;
 import android.util.Log;
 
@@ -49,6 +52,8 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     static final String ACTION_STOP = "sa.urtv.home.STOP";
     static final String ACTION_SLEEP = "sa.urtv.home.SLEEP";
     static final String ACTION_SEEK_BY = "sa.urtv.home.SEEK_BY";
+    /** the person stopped the adhan that is playing (OK on its bar, or any key): only that adhan ends, never the alarm for the next one */
+    static final String ACTION_STOP_ADHAN = "sa.urtv.home.STOP_ADHAN";
 
     static final String EXTRA_RECITER = "reciter";
     static final String EXTRA_SURAH = "surah";
@@ -65,6 +70,14 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     private static volatile String error;
     private static volatile long sleepUntil;
     private static volatile String adhanName;
+    /** the prayer the adhan on is for (PrayerTimes' number), -1 when it was played from the computer or is a preview */
+    private static volatile int adhanPrayer = -1;
+    /** an adhan for a prayer is playing (not a preview): the bars on the home and the screensaver say so and how to stop it */
+    private static volatile boolean adhanLive;
+    /** for `optimize/music.sh status`: what happened since this app started, so a report of «يقطّع» says what the player saw */
+    private static volatile int rebuffers, errors;
+    private static volatile long rebufferMs, lastErrorAt;
+    private static volatile String lastError = "";
 
     private Catalog cat;
     private Prefs prefs;
@@ -76,6 +89,10 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     private boolean foregroundStarted;
     private boolean resumeOnFocus;
     private int retries;
+    /** what the person asked for (playing or not), apart from what the MediaPlayer is doing; and which player's callbacks are still current */
+    private final PlayIntent wish = new PlayIntent();
+    private long rebufferStart;
+    private long shortStart;
     private int pendingSeek;
     private int fadeStep;
     /** the 1-second position tick runs only while something plays */
@@ -90,9 +107,24 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     private boolean adhanPreview;
     /** the TV's own volume, put back when the adhan ends (-1: nothing to put back) */
     private int savedVolume = -1;
+    /** the level the adhan set the volume to, so a volume the person changed meanwhile is left alone (-1: not known) */
+    private int adhanLevel = -1;
+    /** the adhan on is cut to its first minute (the option is on and it is not a preview) */
+    private boolean adhanShortNow;
     private int pausedSource = Prefs.SOURCE_NONE, pausedReciter = -1, pausedSurah = 1, pausedStation = -1, pausedPosition;
     private final Runnable previewStop = new Runnable() {
         @Override public void run() { if (source == Prefs.SOURCE_ADHAN) finishAdhan(); }
+    };
+    /** «أذان مختصر»: the last seconds of its first minute are a fade, then it ends like any adhan */
+    private final Runnable shortTick = new Runnable() {
+        @Override public void run() {
+            if (source != Prefs.SOURCE_ADHAN || !adhanShortNow) return;
+            long elapsed = SystemClock.elapsedRealtime() - shortStart;
+            if (elapsed >= AdhanVoices.SHORT_MS) { finishAdhan(); return; }
+            float gain = AdhanVoices.shortGain(elapsed);
+            if (player != null) { try { player.setVolume(gain, gain); } catch (IllegalStateException ignored) { } }
+            handler.postDelayed(this, 250);
+        }
     };
     /** nothing plays to a dark screen: the adhan stops when the TV goes to standby */
     private final BroadcastReceiver screenOff = new BroadcastReceiver() {
@@ -166,6 +198,13 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     static String currentError() { return error; }
     static long sleepAt() { return sleepUntil; }
     static String adhanName() { return adhanName; }
+    static boolean adhanLive() { return adhanLive && source == Prefs.SOURCE_ADHAN; }
+    static int adhanPrayer() { return adhanPrayer; }
+    static int rebufferCount() { return rebuffers; }
+    static int errorCount() { return errors; }
+    static long rebufferMillis() { return rebufferMs; }
+    static String lastErrorCode() { return lastError; }
+    static long lastErrorAt() { return lastErrorAt; }
 
     // ---- starting it from an activity or the receiver ----
     static void start(Context c, Intent intent) {
@@ -185,8 +224,12 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     }
 
     /** Plays the adhan now; `previewSeconds` > 0 stops it again after that long (the voice picker). */
-    static void adhan(Context c, int voice, String name, int previewSeconds) {
+    static void adhan(Context c, int voice, String name, int previewSeconds) { adhan(c, voice, name, previewSeconds, -1); }
+
+    /** `prayer`: PrayerTimes' number of the prayer this adhan is for (the bars name it), -1 when none */
+    static void adhan(Context c, int voice, String name, int previewSeconds, int prayer) {
         start(c, intent(c, ACTION_PLAY_ADHAN)
+                .putExtra("prayer", prayer)
                 .putExtra(EXTRA_VOICE, voice)
                 .putExtra(EXTRA_SECONDS, previewSeconds)
                 .putExtra("name", name));
@@ -199,6 +242,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     static void nextAction(Context c) { start(c, intent(c, ACTION_NEXT)); }
     static void prevAction(Context c) { start(c, intent(c, ACTION_PREV)); }
     static void stopAction(Context c) { start(c, intent(c, ACTION_STOP)); }
+    static void stopAdhan(Context c) { start(c, intent(c, ACTION_STOP_ADHAN)); }
     /** For the TV's sleep timer (outside this package): stops whatever is playing; does nothing when nothing is. */
     public static void stopIfPlaying(Context c) { if (playing || buffering) stopAction(c); }
     static void sleep(Context c, int minutes) { start(c, intent(c, ACTION_SLEEP).putExtra(EXTRA_MINUTES, minutes)); }
@@ -209,6 +253,9 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         cat = Catalog.get(this);
         prefs = new Prefs(this);
         audio = (AudioManager) getSystemService(AUDIO_SERVICE);
+        // an adhan that never finished here (the player was stopped mid-adhan): the TV's own volume comes back now
+        savedVolume = prefs.savedTvVolume();
+        adhanVolumeBack();
         createChannel();
         session = new MediaSession(this, "urtv-tilawah");
         session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
@@ -240,7 +287,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
                 break;
             case ACTION_PLAY_ADHAN:
                 playAdhan(intent.getIntExtra(EXTRA_VOICE, prefs.voice()),
-                        intent.getStringExtra("name"), intent.getIntExtra(EXTRA_SECONDS, 0));
+                        intent.getStringExtra("name"), intent.getIntExtra(EXTRA_SECONDS, 0), intent.getIntExtra("prayer", -1));
                 break;
             case ACTION_PAUSE: pause(); break;
             case ACTION_RESUME: resume(); break;
@@ -250,6 +297,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
             case ACTION_SEEK_BY: seekBy(intent.getIntExtra(EXTRA_DELTA, 0)); break;
             case ACTION_SLEEP: setSleep(intent.getIntExtra(EXTRA_MINUTES, 0)); break;
             case ACTION_STOP: stopPlayback(); break;
+            case ACTION_STOP_ADHAN: if (source == Prefs.SOURCE_ADHAN) finishAdhan(); break;   // what it paused comes back, as when it ends by itself
             default: break;
         }
         return START_NOT_STICKY;
@@ -284,6 +332,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     private void playSurah(int index, int n, int startAt) {
         if (index < 0 || index >= cat.reciters.size()) return;
+        leaveAdhan();
         Catalog.Reciter r = cat.reciters.get(index);
         if (n < 1) n = 1;
         if (n > r.surahs) n = r.surahs;
@@ -293,26 +342,30 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         station = -1;
         retries = 0;
         pendingSeek = Math.max(0, startAt);
+        wish.ask();
         prefs.save(source, r.id, surah, station, pendingSeek);
         startUrl(r.server + String.format(Locale.US, "%03d", n) + ".mp3");
     }
 
     private void playRadio(int index) {
         if (index < 0 || index >= cat.stations.size()) return;
+        leaveAdhan();
         source = Prefs.SOURCE_RADIO;
         station = index;
         reciter = -1;
         surah = 1;
         retries = 0;
         pendingSeek = 0;
+        wish.ask();
         prefs.save(source, "", surah, station, 0);
         startUrl(cat.stations.get(index).url);
     }
 
     // ---- the adhan: pause whatever is on, play it, then bring the surah back ----
 
-    private void playAdhan(int wanted, String name, int previewSeconds) {
+    private void playAdhan(int wanted, String name, int previewSeconds, int prayer) {
         handler.removeCallbacks(previewStop);
+        handler.removeCallbacks(shortTick);
         boolean wasAdhan = source == Prefs.SOURCE_ADHAN;
         if (wasAdhan && playing) {
             if (adhanPreview && previewSeconds > 0) {   // the volume row again: the new level, and the same few seconds again
@@ -325,6 +378,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         }
         final boolean gone = wanted == Prefs.OWN && !OwnAdhan.exists(this);   // the recording was removed: a numbered voice
         final int voice = gone ? prefs.voice() : wanted;
+        adhanShortNow = previewSeconds == 0 && prefs.adhanShort();
         if (gone) name = null;
         adhanVolumeUp();
         boolean comeBack = prepareAdhanPause();   // false when an adhan was already on
@@ -334,8 +388,11 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         adhanVoice = voice;
         adhanFromCache = false;
         adhanName = name != null ? name : Adhan.name(voice);
+        adhanLive = previewSeconds == 0;
+        adhanPrayer = previewSeconds == 0 ? prayer : -1;
         retries = 0;
         pendingSeek = 0;
+        wish.ask();
         prefs.setLastAdhan(System.currentTimeMillis());   // for `music.sh adhan`; the duplicate guard is the alarm's own (AdhanReceiver)
         File cached = voice == Prefs.OWN ? OwnAdhan.file(this) : Adhan.cached(this, voice);
         // the person's own file is always on the TV: nothing to fetch, nothing to retry from the network
@@ -358,7 +415,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         pausedSurah = surah;
         pausedStation = station;
         pausedPosition = position;
-        boolean wasPlaying = playing;
+        boolean wasPlaying = playing || (buffering && wish.wants());   // asked for and still loading counts
         if (player != null) {
             try { player.pause(); } catch (IllegalStateException ignored) {}
         }
@@ -367,13 +424,26 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         return wasPlaying;
     }
 
+    /** A surah or a station picked while the adhan plays: the adhan ends here, and the TV's volume comes back. */
+    private void leaveAdhan() {
+        if (source != Prefs.SOURCE_ADHAN) return;
+        handler.removeCallbacks(previewStop);
+        handler.removeCallbacks(shortTick);
+        adhanShortNow = false;
+        adhanVolumeBack();
+        resumeAfterAdhan = false;
+        adhanName = null; adhanLive = false; adhanPrayer = -1;
+    }
+
     /** The adhan is over: put the surah back where it was, or stop. */
     private void finishAdhan() {
         handler.removeCallbacks(previewStop);
+        handler.removeCallbacks(shortTick);
+        adhanShortNow = false;
         adhanVolumeBack();
         boolean resume = resumeAfterAdhan;
         resumeAfterAdhan = false;
-        adhanName = null;
+        adhanName = null; adhanLive = false; adhanPrayer = -1;
         if (resume && pausedSource == Prefs.SOURCE_SURAH) {
             playSurah(pausedReciter, pausedSurah, pausedPosition);
         } else if (resume && pausedSource == Prefs.SOURCE_RADIO) {
@@ -390,19 +460,33 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     private void adhanVolumeUp() {
         if (audio == null) return;
         int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        if (savedVolume < 0) savedVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC);   // the TV's own, put back at the end
+        if (savedVolume < 0) {   // the TV's own, put back at the end (also after a restart of the player: on disk)
+            savedVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC);
+            prefs.setSavedTvVolume(savedVolume);
+        }
         int want = Math.round(max * prefs.adhanVolume() / 100f);
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, Math.max(1, Math.min(max, want)), 0);
+        adhanLevel = audio.getStreamVolume(AudioManager.STREAM_MUSIC);   // what it took, which can differ from what was asked
+        prefs.setAdhanLevel(adhanLevel);
     }
 
+    /** The one way back for the TV's volume: any end of an adhan (over, replaced, failed, stopped, the service gone) comes here. */
     private void adhanVolumeBack() {
         if (savedVolume < 0) return;
-        if (audio != null) audio.setStreamVolume(AudioManager.STREAM_MUSIC, savedVolume, 0);
+        if (audio != null) {
+            int level = adhanLevel >= 0 ? adhanLevel : prefs.adhanLevel();
+            int to = AdhanVolume.restore(savedVolume, level, audio.getStreamVolume(AudioManager.STREAM_MUSIC));
+            if (to >= 0) audio.setStreamVolume(AudioManager.STREAM_MUSIC, to, 0);   // else the person turned it themselves: it stays
+        }
         savedVolume = -1;
+        adhanLevel = -1;
+        prefs.setSavedTvVolume(-1);
+        prefs.setAdhanLevel(-1);
     }
 
     private void startUrl(String url) {
         releasePlayer();
+        final int gen = wish.newPlayer();
         currentUrl = url;
         error = null;
         buffering = true;
@@ -413,47 +497,86 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         foreground();
 
         player = new MediaPlayer();
-        player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        player.setAudioAttributes(MEDIA_ATTRS);   // minSdk 26; USAGE_MEDIA is STREAM_MUSIC, the stream the adhan's own volume (adhanVolumeUp) sets
         player.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK);
         player.setVolume(1f, 1f);
         player.setOnPreparedListener(mp -> {
+            if (!wish.current(gen)) return;   // an older player's: this one has been replaced or stopped
             prepared = true;
             buffering = false;
             retries = 0;
             error = null;
-            if (requestFocus()) {
-                if (pendingSeek > 0) {
-                    try { mp.seekTo(pendingSeek); } catch (IllegalStateException ignored) {}
-                    position = pendingSeek;
-                    pendingSeek = 0;
-                }
+            if (pendingSeek > 0) {
+                try { mp.seekTo(pendingSeek); } catch (IllegalStateException ignored) {}
+                position = pendingSeek;
+                pendingSeek = 0;
+            }
+            if (!wish.wants()) {   // paused while it was loading: it waits, ready, for an explicit resume
+                playing = false;
+                playbackPaused();
+                save();
+            } else if (requestFocus()) {
                 mp.start();
                 playing = true;
                 playbackStarted();
+                if (source == Prefs.SOURCE_ADHAN && adhanShortNow) {
+                    shortStart = SystemClock.elapsedRealtime();
+                    handler.removeCallbacks(shortTick);
+                    handler.postDelayed(shortTick, AdhanVoices.SHORT_MS - AdhanVoices.FADE_MS);
+                }
+            } else if (source == Prefs.SOURCE_ADHAN) {
+                finishAdhan();   // nobody gave the sound: the TV's volume comes back and what was paused goes on
+                return;
             } else {
                 error = "الصوت مشغول";
             }
             updateSession();
             updateNotification();
         });
+        player.setOnInfoListener((mp, what, extra) -> {
+            if (!wish.current(gen)) return true;
+            if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START && prepared && playing) {   // it ran dry while playing: a rebuffer
+                rebuffers++;
+                rebufferStart = SystemClock.elapsedRealtime();
+                buffering = true;
+                updateSession();
+                updateNotification();
+            } else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END && buffering && prepared) {
+                if (rebufferStart > 0) rebufferMs += SystemClock.elapsedRealtime() - rebufferStart;
+                rebufferStart = 0;
+                buffering = false;
+                updateSession();
+                updateNotification();
+            }
+            return true;
+        });
         player.setOnCompletionListener(mp -> {
+            if (!wish.current(gen)) return;
             if (source == Prefs.SOURCE_SURAH) next();
             else if (source == Prefs.SOURCE_ADHAN) finishAdhan();
             else { playing = false; updateSession(); updateNotification(); }
         });
-        player.setOnErrorListener((mp, what, extra) -> { onPlaybackError(); return true; });
+        player.setOnErrorListener((mp, what, extra) -> {
+            if (wish.current(gen)) onPlaybackError(what, extra);
+            return true;
+        });
         try {
             player.setDataSource(url);
             player.prepareAsync();
         } catch (Exception e) {
             Log.w(TAG, "cannot play " + url, e);
-            onPlaybackError();
+            onPlaybackError(-1, 0);
         }
         updateSession();
         updateNotification();
     }
 
-    private void onPlaybackError() {
+    private void onPlaybackError(int what, int extra) {
+        errors++;
+        lastError = (source == Prefs.SOURCE_RADIO ? "radio" : source == Prefs.SOURCE_ADHAN ? "adhan" : "surah")
+                + " " + PlayerFault.code(what, extra) + " (what=" + what + ", extra=" + extra + ")";
+        lastErrorAt = System.currentTimeMillis() / 1000;
+        rebufferStart = 0;
         playing = false;
         buffering = false;
         prepared = false;
@@ -477,11 +600,12 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
             error = getString(R.string.retrying);
             updateSession();
             updateNotification();
+            final int gen = wish.currentGeneration();
             handler.postDelayed(() -> {
-                if (failed.equals(currentUrl) && !playing) startUrl(failed);
+                if (wish.retry(gen, playing) && failed.equals(currentUrl)) startUrl(failed);   // not after a stop, a pause-and-leave or another pick
             }, 3000);
         } else {
-            error = getString(R.string.no_connection);
+            error = PlayerFault.message(source == Prefs.SOURCE_RADIO, what, extra);
             updateSession();
             updateNotification();
             save();
@@ -524,18 +648,36 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     void seekBy(int delta) {
         if (source == Prefs.SOURCE_ADHAN) return;
-        if (source == Prefs.SOURCE_SURAH) seekTo(position + delta);
+        // the screen paces a held key (10 s per 250 ms); SeekBurst drops a burst that gets past it (a script, a stuck key)
+        int now = seekBurst.offer(delta, SystemClock.elapsedRealtime());
+        if (now != 0) applySeek(now);
+    }
+
+    private final SeekBurst seekBurst = new SeekBurst();
+
+    private void resetSeekBurst() { seekBurst.reset(); }
+
+    private void applySeek(int delta) {
+        if (source == Prefs.SOURCE_SURAH) seekTo(SeekBurst.target(position, delta, duration));   // a surah only; a station is live, a step there is next/prev
         else if (delta > 0) next();
         else if (delta < 0) prev();
     }
 
     void toggle() {
         if (player == null) { resumeLastInternal(); return; }
-        if (playing) pause(); else resume();
+        if (playing || (buffering && wish.wants())) pause(); else resume();
     }
 
     void pause() {
+        if (player != null && !playing && wish.wants()) {   // still loading, or held by another app's sound: remember the wish; the media stays ready
+            wish.pause();
+            resumeOnFocus = false;
+            updateSession();
+            updateNotification();
+            return;
+        }
         if (player != null && playing) {
+            wish.pause();
             player.pause();
             playing = false;
             resumeOnFocus = false;
@@ -549,8 +691,14 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     void resume() {
         if (player == null) { resumeLastInternal(); return; }
-        if (!prepared) return;
+        if (!prepared) {   // still loading: it plays when it arrives
+            wish.ask();
+            updateSession();
+            updateNotification();
+            return;
+        }
         if (requestFocus()) {
+            wish.ask();
             player.start();
             playing = true;
             error = null;
@@ -572,10 +720,14 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     }
 
     void stopPlayback() {
+        resetSeekBurst();
         if (source != Prefs.SOURCE_ADHAN) save();
         adhanVolumeBack();
         resumeAfterAdhan = false;
+        wish.stop();
+        adhanShortNow = false;
         handler.removeCallbacks(previewStop);
+        handler.removeCallbacks(shortTick);
         releasePlayer();
         playing = false;
         buffering = false;
@@ -584,7 +736,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         duration = 0;
         error = null;
         source = Prefs.SOURCE_NONE;
-        adhanName = null;
+        adhanName = null; adhanLive = false; adhanPrayer = -1;
         handler.removeCallbacks(sleepStart);
         handler.removeCallbacks(fade);
         fadeStep = 0;
@@ -602,6 +754,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     }
 
     private void releasePlayer() {
+        resetSeekBurst();
         if (player != null) {
             try { player.reset(); } catch (Exception ignored) {}
             try { player.release(); } catch (Exception ignored) {}
@@ -648,13 +801,26 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     // ---- audio focus ----
 
+    /** surah, radio and adhan all play as media (the adhan's volume is the music stream's, see adhanVolumeUp); minSdk is 26, so no API guard */
+    private static final AudioAttributes MEDIA_ATTRS = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build();
+    private AudioFocusRequest focusRequest;
+
     private boolean requestFocus() {
-        return audio.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+        if (audio == null) return false;
+        if (focusRequest == null) {
+            focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(MEDIA_ATTRS)
+                    .setOnAudioFocusChangeListener(this, handler)   // the same listener, now on the main thread's handler as before
+                    .build();
+        }
+        return audio.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
     }
 
     private void abandonFocus() {
-        if (audio != null) audio.abandonAudioFocus(this);
+        if (audio != null && focusRequest != null) audio.abandonAudioFocusRequest(focusRequest);
     }
 
     @Override public void onAudioFocusChange(int change) {
@@ -688,7 +854,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     /** The home screen's «يُتلى الآن» card hears about it when what it shows may have changed: once per change, never on the clock's tick. */
     private String announced = "";
     private void announce() {
-        String now = source + "|" + playing + "|" + buffering + "|" + reciter + "|" + surah + "|" + station + "|" + (error != null) + "|" + (sleepUntil > 0);
+        String now = source + "|" + playing + "|" + buffering + "|" + reciter + "|" + surah + "|" + station + "|" + error + "|" + (sleepUntil > 0);
         if (now.equals(announced)) return;
         announced = now;
         sendBroadcast(new Intent(NowPlaying.CHANGED).setPackage(getPackageName()));
