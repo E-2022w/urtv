@@ -191,6 +191,12 @@
   .week li.lv .lvt .tm{gap:.35em}
   .week li.lv .lvt .tm .cr{width:1.35em;height:1.35em;margin:0}
   .week li.lv .sc{color:var(--gold-hi);font-size:1.25em;font-weight:700;font-variant-numeric:tabular-nums;padding:0 .1em}
+  /* «الصلاة القادمة»: the name lit, its time, and the time left (as large and as bright as the time: the most useful part); the line
+     may wrap between them, never inside one */
+  .week li.np{display:flex;flex-wrap:wrap;align-items:baseline;gap:.15em .5em;white-space:normal;border-bottom:none;padding:1.2vh 0 .6vh}
+  .week li.np > *{flex:0 0 auto;max-width:none;overflow:visible;text-overflow:clip;padding:0;margin:0;white-space:nowrap}
+  .week li.np b{font-weight:500;color:var(--gold-hi)}
+  .week li.np .t{font-variant-numeric:tabular-nums}
   /* «يومك»: a small name, then the thing itself (it may wrap, never «…»), then when */
   .week li.td{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.1em .8em;align-items:baseline;white-space:normal}
   .week li.td > span{max-width:none;overflow:visible;text-overflow:clip;padding:0;margin:0}   /* not the list rows' first-name rule */
@@ -393,6 +399,9 @@
     margin-top:1.4vh;display:flex;align-items:center;gap:.7em;
     font-size:clamp(12px,1.02vw,20px);font-weight:300;letter-spacing:.3em;color:#D8CDB6;
   }
+  /* the first starts while no city was ever set (#citynote=1): one quiet line under the city, gone after ten minutes */
+  .citynote{margin-top:1vh;font-size:clamp(14px,1.1vw,21px);font-weight:400;color:#D8CDB6}
+  .citynote[hidden]{display:none}
   .subline .dot{width:5px;height:5px;border-radius:50%;background:var(--gold);opacity:.9}
 
   .bottom{
@@ -551,6 +560,7 @@
         <span class="ampm" id="ck-ap">—</span><span class="d" id="ck-h">--</span><span class="sep">:</span><span class="d" id="ck-m">--</span>
       </div>
       <div class="subline"><span class="dot"></span><span id="clock-sub">بتوقيت الرياض</span></div>
+      <div class="citynote" id="citynote" hidden></div>
       <div class="ystrip" id="ystrip" hidden></div>
     </div>
 
@@ -602,7 +612,7 @@ const _num = (k, d) => { const v = parseFloat(_Q.get(k)); return isNaN(v) ? d : 
 // the city's time zone, #tz=: the clock, prayers, matches and dates all go by it; one this browser does not know is Riyadh
 const _tzOk = z => { try{ new Intl.DateTimeFormat('en',{timeZone:z}); return true; }catch(e){ return false; } };
 // the cards a slot can show (Prefs.PANELS in the app is the same list); «none» is the absence of one
-const CARD_KINDS = ['shows','prayers','forecast','hourly','prayerrow','matches','verse','wisdom','adhkar','stocks','tasks','year','smart','today'];
+const CARD_KINDS = ['shows','prayers','forecast','hourly','prayerrow','nextprayer','matches','verse','wisdom','adhkar','stocks','tasks','year','smart','today'];
 const CONFIG = {
   city: _Q.get('city') || 'الرياض',
   latitude: _num('lat', 24.7136),
@@ -683,6 +693,8 @@ const CONFIG = {
   // #live=1 (the launcher): the «المهام» card is a button there (OK opens the list with the mic ready), so it carries a mic mark and
   // a ring while it has the focus. Only on the launcher's page; the screensaver never has it.
   live: _Q.get('live') === '1',
+  // #citynote=1: the screensaver's first starts while the city is still the install's Riyadh (Prefs.screenUrl); never the widget
+  cityNote: _Q.get('citynote') === '1' && _Q.get('widget') !== '1',
   // #widget=1: only the cards, on a transparent page (the launcher's home screen shows them)
   widget: _Q.get('widget') === '1',
 };
@@ -692,18 +704,22 @@ const CONFIG = {
 // (launcher) and PrayerMethod (app) say the same, tests/prayer_method_test.py compares them
 CONFIG.prayerMethod = _Q.get('pm') === 'jafari' ? 0
   : ({'Asia/Kuwait':9, 'Asia/Qatar':10, 'Asia/Dubai':16, 'Asia/Bahrain':8, 'Asia/Muscat':8})[CONFIG.timezone] || 4;
+// the calculation's name under the clock when it is not Umm al-Qura: «بتوقيت المنامة · حساب الخليج» (ClockZone.calendar in the launcher
+// says the same on the home screen); Umm al-Qura says nothing, «بتوقيت الرياض» as it always was
+const CAL_LABEL = {0:'الحساب الجعفري', 8:'حساب الخليج', 9:'حساب الكويت', 10:'حساب قطر', 16:'حساب الإمارات'};
+const clockSubText = () => 'بتوقيت ' + CONFIG.city + (CAL_LABEL[CONFIG.prayerMethod] ? ' · ' + CAL_LABEL[CONFIG.prayerMethod] : '');
 CONFIG.cards = (CONFIG.widget && _Q.has('home_panel') ? _list('home_panel') : [CONFIG.panel])
   .filter((k, i, a) => CARD_KINDS.includes(k) && a.indexOf(k) === i).slice(0, 3);
 CONFIG.panel = CONFIG.cards[0] || 'none';   // the first one, for what only needs to know "the card"
 // does a card on this page need that kind's data? The smart card reads what the matches, the adhkar, the prayers and the hours load;
 // «يومك» what the prayers, the matches and the tasks do
-const USES_OF = {smart:['matches','adhkar','prayers','prayerrow','hourly'], today:['prayers','matches','tasks']};
+const USES_OF = {smart:['matches','adhkar','prayers','prayerrow','hourly'], today:['prayers','matches','tasks'], nextprayer:['prayers']};
 const USES = k => CONFIG.cards.some(c => c === k || (USES_OF[c] || []).includes(k));
 
 // The panels' snapshot is keyed by the link without the settings that only change how things look (the card's style and place, the clock's
 // size, the strips, the photo timing): changing one of those offline must not lose the games already on screen. What changes the words or
 // the markup inside the saved panels (the teams, leagues, digits, slot, markets, their style and switch…) stays in the key.
-const SNAP_LOOK = ['cardstyle', 'panel', 'week', 'clocksize', 'adhanbar', 'yearstrip', 'national', 'photos', 'adj', 'own', 'ownmode', 'gap'];
+const SNAP_LOOK = ['citynote', 'cardstyle', 'panel', 'week', 'clocksize', 'adhanbar', 'yearstrip', 'national', 'photos', 'adj', 'own', 'ownmode', 'gap'];
 function snapLink(){
   return location.hash.replace(/^#/, '').split('&').filter(kv => kv && !SNAP_LOOK.includes(kv.split('=')[0])).join('&');
 }
@@ -927,7 +943,7 @@ async function loadPrayers(){
   }
   tickPrayer();
   tickOccasion();   // Ramadan mode needs the prayer times
-  renderPanel(false, 'prayers', 'adhkar', 'prayerrow');
+  renderPanel(false, 'prayers', 'adhkar', 'prayerrow', 'nextprayer');
 }
 
 const UNIT = {
@@ -2207,7 +2223,7 @@ function liveRect(){
 
 let FORECAST = [];
 try{ FORECAST = JSON.parse(localStorage.getItem(LS.forecast) || '[]') || []; }catch(e){}
-const PANEL_TITLE = {today:'يومك', shows:'هذا الأسبوع', prayers:'مواقيت اليوم', forecast:'الأيام القادمة', hourly:'الساعات القادمة', matches:CONFIG.leagues.length ? 'المباريات' : 'مباريات فرقك', tasks:'المهام', year:'السنة'};
+const PANEL_TITLE = {today:'يومك', shows:'هذا الأسبوع', prayers:'مواقيت اليوم', nextprayer:'الصلاة القادمة', forecast:'الأيام القادمة', hourly:'الساعات القادمة', matches:CONFIG.leagues.length ? 'المباريات' : 'مباريات فرقك', tasks:'المهام', year:'السنة'};
 const LISTS = ['matches', 'stocks', 'tasks', 'shows'];   // the kinds that page through their rows
 
 // ---- «يومك» (today): the day in one card: the next prayer, the next game of a followed team, the first open task, the next
@@ -2342,6 +2358,7 @@ function renderCard(card, animate, keepSize){
   else if(P === 'forecast') rows = forecastRows();
   else if(P === 'hourly') rows = hourlyRows();
   else if(P === 'prayerrow'){ const q = prayerRowCard(); paintHd(hd, q.title); rows = q.rows; }
+  else if(P === 'nextprayer') rows = nextPrayerRows();
   else if(P === 'matches') rows = matchRows(card);
   else if(P === 'year') rows = [yearCard(card)];
   else if(P === 'today'){ const q = todayCard(); paintHd(hd, q.title); rows = q.rows; }
@@ -2601,6 +2618,17 @@ function shortHM(sec){   // «١ س و ٥ د», «٢ س», «٥ د»
   const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
   return [h ? ar(h) + ' س' : '', m || !h ? ar(Math.max(m, 1)) + ' د' : ''].filter(Boolean).join(' و ');
 }
+// ---- «الصلاة القادمة»: one line, «المغرب ٥:٢١ م، بعد ١ ساعة و ٩ دقائق», the calm one of the prayer cards (after Isha: tomorrow's Fajr)
+function nextPrayerRows(){
+  if(!PRAYERS.length) return [];
+  const p = riyadhParts(), mins = p.h * 60 + p.mi + p.s / 60;
+  let n = PRAYERS.find(x => x.h * 60 + x.mi > mins), tomorrow = false;
+  if(!n){ n = PRAYERS[0]; tomorrow = true; }
+  // in the words of the bar and of the screensaver's own «الصلاة القادمة» (untilAdhan): the same minutes at the same second
+  const left = untilAdhan(n.h * 60 + n.mi + (tomorrow ? 1440 : 0) - mins);
+  return [`<li class="np"><b>${prayerName(n)}</b><span class="t">${fmt12(n.h, n.mi)}،</span><span class="r">بعد ${left}</span></li>`];   // «،», not «·»: beside «م» it reads as «٠»
+}
+
 function prayerRowCard(){
   if(!PRAYERS.length) return {title:'مواقيت اليوم', rows:[]};
   const p = riyadhParts(), mins = p.h * 60 + p.mi + p.s / 60;
@@ -3182,7 +3210,7 @@ function restoreSnap(){
 // What the cards need to be redrawn on, one place for the screensaver and the launcher: pages turn every 25 s, the clock-driven kinds
 // every 15 s (prayers, the row, the hours, the smart card, «يومك»), the windows and markets every minute.
 function cardTimers(){
-  const clocked = ['prayers', 'hourly', 'prayerrow', 'smart', 'today'];
+  const clocked = ['prayers', 'hourly', 'prayerrow', 'nextprayer', 'smart', 'today'];
   setInterval(() => renderPanel(false, ...clocked), 15000);
   setInterval(() => {
     for(const c of CARDS){
@@ -3268,7 +3296,13 @@ function boot(){
   const wxCity = document.getElementById('wx-city');
   if(wxCity) wxCity.textContent = CONFIG.city;
   const cs = document.getElementById('clock-sub');
-  if(cs) cs.textContent = 'بتوقيت ' + CONFIG.city;
+  if(cs) cs.textContent = clockSubText();
+  const cn = document.getElementById('citynote');
+  if(cn && CONFIG.cityNote){   // Location.note in the app says the same in the settings' top row
+    cn.textContent = 'المدينة: ' + CONFIG.city + '. لتغييرها: الإعدادات ثم الموقع';   // words, not «←» (not in Thmanyah) nor «‹›» (mirrored or not by the renderer)
+    cn.hidden = false;
+    setTimeout(() => { cn.hidden = true; }, 10*60*1000);
+  }
   document.title = 'شاشة تلفزيونك';
   applyBackground(true);
   loadPhotoIndex().then(() => applyBackground(true));

@@ -191,7 +191,7 @@ final class Prefs {
 
     // The card beside the clock: value sent to the page (#panel=), Arabic label
     static final String[][] PANELS = {
-        {"shows", "جديد المسلسلات"}, {"prayers", "مواقيت الصلاة اليوم"}, {"forecast", "طقس الأيام القادمة"}, {"hourly", "طقس الساعات القادمة"}, {"prayerrow", "الصلوات في صف"},
+        {"shows", "جديد المسلسلات"}, {"prayers", "مواقيت الصلاة اليوم"}, {"forecast", "طقس الأيام القادمة"}, {"hourly", "طقس الساعات القادمة"}, {"prayerrow", "الصلوات في صف"}, {"nextprayer", "الصلاة القادمة"},
         {"matches", "مباريات فرقك القادمة"}, {"verse", "آية أو حديث اليوم"}, {"wisdom", "حكمة اليوم"},
         {"adhkar", "أذكار الصباح والمساء"}, {"stocks", "الأسهم"}, {"tasks", "المهام"}, {"year", "السنة"},
         {"smart", "البطاقة الذكية"}, {"today", "يومك"},
@@ -209,6 +209,7 @@ final class Prefs {
         {"forecast", "خمسة أيام"},
         {"hourly", "الست ساعات الجاية بالساعة والأيقونة والحرارة، وقمر بعد الغروب"},
         {"prayerrow", "الخمس صلوات في صف واحد، والجاية مضيئة"},
+        {"nextprayer", "سطر واحد: الصلاة الجاية ووقتها وكم باقي لها"},
         {"matches", "مباريات الأسبوع ونتائج آخر يوم لفرقك، وكل مباراة بسطر واحد"},
         {"verse", "آية يوم، وحديث صحيح من الكتب الستة اليوم اللي بعده، ومعه مصدره"},
         {"wisdom", "مثل أو قول عربي معروف مع مصدره"},
@@ -359,6 +360,24 @@ final class Prefs {
 
     /** The page reads its settings from the fragment; a ?query fails on file:// in WebView. */
     String dashboardUrl(Context c) { return pageBase(c) + "#" + fragment(); }
+
+    /** Was a city ever set, from the settings or the computer? Until then it is the install's Riyadh (Location.note). */
+    boolean cityChosen() { return sp.contains("cityName"); }
+
+    /** The first-run note is due now (Location.noteDue): the settings' top row and the screensaver's start ask the same. */
+    boolean cityNoteDue() { return Location.noteDue(FreshInstall.is(ctx), cityChosen(), sp.getInt("cityNoteShown", 0)); }
+
+    /**
+     * The screensaver's page, with #citynote=1 while the note is due. start: a real start of the screensaver (ScreenDream attached),
+     * the only thing that counts toward its three; the settings' preview shows it without counting. Not in fragment(): the launcher's
+     * cards never show it.
+     */
+    String screenUrl(Context c, boolean start) {
+        String url = dashboardUrl(c);
+        if (!cityNoteDue()) return url;
+        if (start) sp.edit().putInt("cityNoteShown", sp.getInt("cityNoteShown", 0) + 1).apply();
+        return url + "&citynote=1";
+    }
 
     /**
      * The page for a preview in the settings: the card alone (#widget=1) with the current settings, but this card in this style.

@@ -18,7 +18,7 @@ public class ScreenDream extends DreamService {
         setFullscreen(true);
         setScreenBright(true);
         attached = true;
-        show();
+        show(true);
     }
 
     /**
@@ -36,8 +36,9 @@ public class ScreenDream extends DreamService {
         return super.dispatchKeyEvent(e);
     }
 
-    private void show() {
-        web = ScreenView.create(this, this::gone);
+    /** start: the dream starting (counted for the first-run note), not a renderer's re-creation */
+    private void show(boolean start) {
+        web = ScreenView.create(this, this::gone, start);
         setContentView(web);
     }
 
@@ -47,7 +48,7 @@ public class ScreenDream extends DreamService {
         ScreenView.release(dead);
         if (dead != web) return;
         web = null;
-        if (attached && guard.mayCreate(System.currentTimeMillis())) show();
+        if (attached && guard.mayCreate(System.currentTimeMillis())) show(false);
         else finish();
     }
 

@@ -121,15 +121,22 @@ public class SettingsActivity extends Activity {
         sp0.setMarginStart(dp(20));
         head.addView(sub, sp0);
         list.addView(head);
+        if (prefs.cityNoteDue()) line(Location.note(prefs.city()[0]), 0xFFD6AF6B, dp(14));   // still the install's Riyadh: say where to change it
 
         row("معاينة الشاشة", "شاهد الشاشة الآن", R.drawable.ic_play, new Runnable() { public void run() {
             startActivity(new Intent(SettingsActivity.this, MainActivity.class)); } }).requestFocus();
 
+        // the place, then how its times are worked out, then the minutes of one's own mosque; the line under them says which is which
         header("الموقع");
+        row("الدولة", Location.countryLabel(prefs.cityTz()), R.drawable.ic_place, new Runnable() { public void run() { pickCountry(); } });
         row("المدينة", prefs.city()[0], R.drawable.ic_place, new Runnable() { public void run() { pickCity(); } });
 
         row("طريقة الحساب", PrayerMethod.label(prefs.prayerMethod(), prefs.cityTz()), R.drawable.ic_place,
             new Runnable() { public void run() { pickPrayerMethod(); } });
+        row("تعديل وقت الصلاة", prefs.prayerAdjOn() ? "يعمل · لكل صلاة دقائقها، من −٢٠ إلى +٢٠ (الشروق لا يتغيّر)" : "متوقف · الأوقات كما تُحسب", R.drawable.ic_eye,
+            new Runnable() { public void run() { prefs.setPrayerAdjOn(!prefs.prayerAdjOn()); render(); } });
+        if (prefs.prayerAdjOn()) for (int k = 0; k < PrayerAdj.COUNT; k++) adjRow(k);
+        line(Location.HELP, 0xFFC6BBA4, 0);
 
         header("المباريات");
         row("الفرق المتابعة (" + arabicNum(prefs.teams().size()) + "/" + arabicNum(Prefs.MAX_TEAMS) + ")", teamsLabel(),
@@ -148,9 +155,6 @@ public class SettingsActivity extends Activity {
         noConv = false;
         row("تنبيه قبل الأذان", prefs.adhanBar() ? "يعمل · شريط في أعلى الشاشة آخر ١٠ دقائق، ثم حتى الإقامة" : "متوقف", R.drawable.ic_eye,
             new Runnable() { public void run() { prefs.setAdhanBar(!prefs.adhanBar()); render(); } });
-        row("تعديل وقت الصلاة", prefs.prayerAdjOn() ? "يعمل · لكل صلاة دقائقها، من −٢٠ إلى +٢٠ (الشروق لا يتغيّر)" : "متوقف · الأوقات كما تُحسب", R.drawable.ic_eye,
-            new Runnable() { public void run() { prefs.setPrayerAdjOn(!prefs.prayerAdjOn()); render(); } });
-        if (prefs.prayerAdjOn()) for (int k = 0; k < PrayerAdj.COUNT; k++) adjRow(k);
         row("شريط السنة تحت الساعة", prefs.yearStrip() ? "يعمل · نقاط السنة تحت الساعة، واليوم يلمع" : "متوقف", R.drawable.ic_eye,
             new Runnable() { public void run() { prefs.setYearStrip(!prefs.yearStrip()); render(); } });
         row("المناسبات الوطنية", Prefs.nationalLabel(prefs.national()), R.drawable.ic_eye,
@@ -222,36 +226,51 @@ public class SettingsActivity extends Activity {
 
     // ---------- pickers ----------
 
-    private void pickCity() {
-        final Cities.Region[] regions = Cities.REGIONS;
-        String[] labels = new String[regions.length + 1];
-        labels[0] = "بحث عن مدينة أو قرية…";
-        for (int i = 0; i < regions.length; i++) labels[i + 1] = regions[i].name + "  (" + regions[i].cities.length + ")";
-        new Dlg(this).setTitle("المنطقة")
-            .setItems(labels, (d, i) -> { if (i == 0) searchCity(); else pickCityIn(regions[i - 1]); })
+    /** «الدولة»: a filter, not a setting of its own; it opens the city list of that country (its regions, or its cities) and its search. */
+    private void pickCountry() {
+        String[] labels = new String[Location.COUNTRIES.length];
+        for (int i = 0; i < labels.length; i++) labels[i] = Location.COUNTRIES[i][1];
+        new Dlg(this).setTitle("الدولة")
+            .setSingleChoiceItems(labels, Location.countryOf(prefs.cityTz()), (d, i) -> { d.dismiss(); pickCity(i); })
             .show();
     }
 
-    private void pickCityIn(final Cities.Region r) {
+    private void pickCity() { pickCity(-1); }
+
+    /** country: an index of Location.COUNTRIES, or -1 for every region of the list and a search of the six countries */
+    private void pickCity(final int country) {
+        final Cities.Region[] regions = country < 0 ? Cities.REGIONS : Location.regions(country);
+        if (country > 0 && regions.length == 1) { pickCityIn(regions[0], country); return; }   // a Gulf state is one region: its cities
+        String[] labels = new String[regions.length + 1];
+        labels[0] = "بحث عن مدينة أو قرية…";
+        for (int i = 0; i < regions.length; i++) labels[i + 1] = regions[i].name + "  (" + regions[i].cities.length + ")";
+        new Dlg(this).setTitle(country < 0 ? "المنطقة" : Location.COUNTRIES[country][1])
+            .setItems(labels, (d, i) -> { if (i == 0) searchCity(country); else pickCityIn(regions[i - 1], country); })
+            .show();
+    }
+
+    private void pickCityIn(final Cities.Region r, final int country) {
         String[] names = new String[r.cities.length];
         int sel = -1;
         for (int i = 0; i < names.length; i++) {
             names[i] = r.cities[i][0];
             if (names[i].equals(prefs.city()[0])) sel = i;
         }
-        new Dlg(this).setTitle(r.name)
+        AlertDialog.Builder b = new Dlg(this).setTitle(r.name)
             .setSingleChoiceItems(names, sel, (d, i) -> {
                 prefs.setCity(r.cities[i][0], r.cities[i][1], r.cities[i][2]);   // the zone follows from the list (Prefs.cityTz)
                 d.dismiss();
                 render();
-            }).show();
+            });
+        if (country > 0) b.setNeutralButton("بحث", (d, w) -> searchCity(country));   // a place not in the list, in that country
+        b.show();
     }
 
     // any place in Saudi Arabia or the other Gulf states, from Open-Meteo's GeoNames search (it takes one country at a time, so the
     // hundred best matches of the world are asked for and the Gulf ones kept)
-    private void searchCity() {
+    private void searchCity(final int country) {
         ask("اسم المدينة أو القرية", q -> fetch("https://geocoding-api.open-meteo.com/v1/search?count=100&language=ar&name="
-            + Uri.encode(q), json -> {
+            + Uri.encode(q) + (country < 0 ? "" : "&countryCode=" + Location.COUNTRIES[country][0]), json -> {
                 JSONArray all = new JSONObject(json).optJSONArray("results"), a = new JSONArray();
                 for (int k = 0; all != null && k < all.length() && a.length() < 20; k++)
                     if (PrayerMethod.searchable(all.getJSONObject(k).optString("country_code"))) a.put(all.getJSONObject(k));
@@ -265,8 +284,8 @@ public class SettingsActivity extends Activity {
                     lons[i] = String.valueOf(c.optDouble("longitude"));
                     zones[i] = c.optString("timezone", "");   // the place's own; empty: the TV's (Prefs.cityTz)
                     String region = c.optString("admin1", "");
-                    String country = c.optString("country", "");   // several countries now: the row says which
-                    rows[i] = names[i] + (region.isEmpty() ? "" : "  ·  " + region) + (country.isEmpty() ? "" : "  ·  " + country);
+                    String land = c.optString("country", "");   // several countries now: the row says which
+                    rows[i] = names[i] + (region.isEmpty() ? "" : "  ·  " + region) + (land.isEmpty() ? "" : "  ·  " + land);
                 }
                 new Dlg(this).setTitle("اختر المكان")
                     .setItems(rows, (d, i) -> { prefs.setCity(names[i], lats[i], lons[i], zones[i]); render(); }).show();
@@ -1048,6 +1067,19 @@ public class SettingsActivity extends Activity {
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         t.setTypeface(font("Thmanyah-Medium"));
         t.setPadding(dp(10), dp(18), dp(10), dp(6));
+        list.addView(t);
+    }
+
+    /** One plain line in the list, in no button (nothing to focus): the first-run note at the top, the help under «الموقع». */
+    private void line(String text, int color, int bottom) {
+        TextView t = new TextView(this);
+        t.setText(conv(text));
+        t.setTextColor(color);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        t.setTypeface(font("Thmanyah-Regular"));
+        t.setGravity(Gravity.START);
+        t.setTextDirection(View.TEXT_DIRECTION_RTL);
+        t.setPadding(dp(10), dp(8), dp(10), bottom);
         list.addView(t);
     }
 
