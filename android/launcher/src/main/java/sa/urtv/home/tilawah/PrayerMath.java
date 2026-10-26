@@ -31,7 +31,9 @@ final class PrayerMath {
      *  10  Qatar: Fajr 18°, Isha 90 minutes after Maghrib
      *  16  Dubai (the UAE's General Authority of Islamic Affairs): Fajr 18.2°, Isha 18.2°, sunrise −3, Dhuhr, Asr and Maghrib +3 minutes
      *   5  Egypt, the Egyptian General Authority of Survey: Fajr 19.5°, Isha 17.5° (praytimes.org/docs/methods and the ITL library's
-     *      method-info list the same angles; Aladhan's id 5 is this authority)
+     *      method-info list the same angles; Aladhan's id 5 is this authority). Syria, Lebanon and Palestine (Asia/Damascus, Asia/Beirut,
+     *      Asia/Gaza, Asia/Hebron) get this one too: Aladhan has no method of their own, none of their religious authorities publishes
+     *      angles that Aladhan carries, and praytimes.org names the Egyptian method for Syria and Lebanon, so it is the closest honest choice
      *  23  Jordan, the Ministry of Awqaf, Islamic Affairs and Holy Places: Fajr 18°, Isha 18°, Maghrib 5 minutes after sunset (the idea
      *      and the figures of pull request 34; Aladhan's id 23)
      * Asr is the shadow-length-one (Shafi'i) Asr for all of them; Maghrib is sunset (0.833°) except for the Ja'fari.
@@ -79,7 +81,7 @@ final class PrayerMath {
             case "Asia/Qatar": return QATAR;
             case "Asia/Dubai": return DUBAI;
             case "Asia/Bahrain": case "Asia/Muscat": return GULF;
-            case "Africa/Cairo": return EGYPT;
+            case "Africa/Cairo": case "Asia/Damascus": case "Asia/Beirut": case "Asia/Gaza": case "Asia/Hebron": return EGYPT;
             case "Asia/Amman": return JORDAN;
             default: return UMM_AL_QURA;
         }

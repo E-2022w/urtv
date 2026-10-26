@@ -20,7 +20,7 @@ def check(name, ok, detail=""):
 
 
 EXPECTED_METHODS = 8   # Ja'fari, Umm al-Qura, the four Gulf ones, Egypt, Jordan
-EXPECTED_ZONES = 7   # the zones that have a method of their own: the Gulf's five, Cairo, Amman
+EXPECTED_ZONES = 11   # the zones that have a method of their own: the Gulf's five, Cairo, Amman, Damascus, Beirut, Gaza, Hebron
 # the page: CONFIG.prayerMethod = pm=jafari ? 0 : ({'Asia/Kuwait':9, ...})[zone] || 4
 tpl = (ROOT / "src/template.html").read_text(encoding="utf-8")
 m = re.search(r"CONFIG\.prayerMethod = _Q\.get\('pm'\) === 'jafari' \? 0\s*:\s*\(\{([^}]*)\}\)\[CONFIG\.timezone\] \|\| 4;", tpl)

@@ -107,7 +107,8 @@ public final class PrayerMathRun {
         check("methods: Riyadh 4, Kuwait 9, Qatar 10, Dubai 16, Bahrain and Muscat 8, Cairo 5, an unknown zone 4",
                 PrayerMath.methodFor("Asia/Riyadh", null) == 4 && PrayerMath.methodFor("Asia/Kuwait", null) == 9 && PrayerMath.methodFor("Asia/Qatar", null) == 10
                 && PrayerMath.methodFor("Asia/Dubai", null) == 16 && PrayerMath.methodFor("Asia/Bahrain", null) == 8 && PrayerMath.methodFor("Asia/Muscat", "auto") == 8
-                && PrayerMath.methodFor("Africa/Cairo", null) == 5 && PrayerMath.methodFor("Asia/Amman", null) == 23 && PrayerMath.methodFor("Nowhere/Land", null) == 4 && PrayerMath.methodFor(null, null) == 4, "");
+                && PrayerMath.methodFor("Africa/Cairo", null) == 5 && PrayerMath.methodFor("Asia/Amman", null) == 23 && PrayerMath.methodFor("Asia/Damascus", null) == 5 && PrayerMath.methodFor("Asia/Beirut", null) == 5
+                && PrayerMath.methodFor("Asia/Gaza", null) == 5 && PrayerMath.methodFor("Asia/Hebron", null) == 5 && PrayerMath.methodFor("Nowhere/Land", null) == 4 && PrayerMath.methodFor(null, null) == 4, "");
         check("methods: pm=jafari is the Ja'fari everywhere, 0", PrayerMath.methodFor("Asia/Riyadh", "jafari") == 0 && PrayerMath.methodFor("Asia/Kuwait", "jafari") == 0, "");
         check("methods: the Ramadan half hour of Isha is Umm al-Qura's alone",
                 PrayerMath.ishaDelayMillis(true, 4) == 120 * 60_000L && PrayerMath.ishaDelayMillis(true, 10) == 90 * 60_000L && PrayerMath.ishaDelayMillis(true, 8) == 90 * 60_000L, "");
