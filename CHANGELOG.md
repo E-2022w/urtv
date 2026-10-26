@@ -27,15 +27,14 @@ Newest first. `next` is where changes land first; a release is what was tested t
 
 **Setup and tools**
 - The home switch can always be undone: a nonce on the safety switch, a heartbeat check before switching, a journal read on the next run, and `optimize/restore-home.sh`.
-- Reports are built from an allowlist of fields, with the scrub as a second net.
 - Pair over Wireless debugging, find the TV again, and check first that it is Android TV with a new enough WebView.
 - Community lists for TVs our own lists do not know; the setup wizard and TCL auto-start are handled.
 - The setup shows what was turned off and lets a person keep any of it.
 - Problems are reported through the form, never GitHub; share steps never print a negative time; Windows 11 is told from 10.
 - The ADB key and the saved TV stay outside the clone.
 - `AGENTS.md` for agents; new rows for the `!!` lines; the models seen in reports in `docs/TVS.md`.
-- Reports now pass an allowlist of the fields they may hold, and a second scrub also covers IPv6 addresses, links with
-  tokens, Wi-Fi names and user names in any script.
+- Reports keep only the lines the script builds, and the scrub (the net for what the scripts printed on `!!` lines)
+  also covers IPv6 addresses, emails, serials, tokens, links with tokens, Wi-Fi names and user names.
 - `SECURITY.md`, `CONTRIBUTING.md` and this file.
 
 ## 23 October 2026 (51b9680)

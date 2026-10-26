@@ -55,9 +55,12 @@ FREE_HEADINGS = ("Notes from the agent:", "From the owner:")
 ALLOWED_LINE = re.compile(
     r"UrTV (problem|setup) report, |TV: |Computer: |Steps, minutes:seconds:$|Memory:$|Checks:$|Setup results: |ADB: "
     r"|Protected features on: |(Device|WebView|Home|Screensaver|Versions|Extras):|Auto-start|Optional picks|!! |- |  (off|on): "
-    r"|home hides|[\w-]+: \d+ off, |\(|\?|\d+ min in all$|\[\d+:\d\d until it was run again\]$"
+    r"|home hides|[\w-]+: \d+ off, |\(no steps\.log: an older run\.sh\)$|\(not measured\)$|\(no report\.md yet: the setup didn't finish\)$|\d+ min in all$|\[\d+:\d\d until it was run again\]$"
     r"|[A-Za-z0-9_.-]+ \d+:\d\d( STOPPED.*)?(, [A-Za-z0-9_.-]+ \d+:\d\d( STOPPED.*)?)*(, \[.*\])?$")
 MAX_LINE = 400
+# The `!! ` lines (and the `- !! ` ones of the problems list) carry what the scripts printed: free text. They pass the
+# allowlist by their start only, so they are scrubbed here, visibly, and the scrub is their one real net.
+FREE_LINE = re.compile(r"(- )?!! ")
 
 
 def restrict(text):
@@ -68,6 +71,8 @@ def restrict(text):
             free = True
         elif not free and line.strip() and not ALLOWED_LINE.match(line):
             continue
+        if not free and FREE_LINE.match(line):
+            line = scrub(line)
         out.append(line if free else line[:MAX_LINE])
     return "\n".join(out) + ("\n" if text.endswith("\n") else "")
 
@@ -105,8 +110,17 @@ def scrub(text):   # in case a note or an output carries something personal
     text = re.sub(rf"(?i)\b({WIFI_KEY}\s+){QUOTED}", r"\1<wifi>", text)
     text = "\n".join(re.sub(r"(?i)\b(connected to|joined|associated with|connecting to)\s+(?!the\b|a\b|<).*$", r"\1 <wifi>", l)
                      if "!!" in l else l for l in text.split("\n"))
+    # an email, a serial (also inside the ADB mDNS name adb-<serial>-xxx) and the usual tokens
+    text = re.sub(r"[^\s@<>()\[\]\"']+@[^\s@<>()\[\]\"']+\.\w+", "<email>", text)
+    text = re.sub(r"(?i)\badb-[A-Za-z0-9]+(?=-)", "adb-<serial>", text)
+    text = re.sub(r"(?i)\b(ro\.serial\w*|serial(?:\s?(?:no|number))?)(\s*[=:]\s*|\s+)(?!<)[A-Za-z0-9]{6,}", r"\1\2<serial>", text)
+    text = re.sub(r"(?i)\b(adb\s+device|device)\s+[A-Z0-9]{8,}\b(?=\s+(offline|unauthorized|device|no permissions))", r"\1 <serial>", text)
+    text = re.sub(r"(?i)\bBearer\s+\S+", "Bearer <token>", text)
+    text = re.sub(r"\bgh[pousr]_\w{20,}", "<token>", text)
+    text = re.sub(r"\beyJ[\w-]+\.[\w-]+\.[\w-]*", "<token>", text)
     for name in sorted(own_names(), key=len, reverse=True):
-        text = re.sub(re.escape(name), "<user>", text, flags=re.I)
+        # a whole word or a whole run of letters: user «dev» is not the start of «Device:» (Arabic prefixes still match)
+        text = re.sub(rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])", "<user>", text, flags=re.I)
     return text
 
 

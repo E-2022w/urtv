@@ -134,14 +134,21 @@ cases = {
     "IPv6 full, with scope": (f"!! no route to {v6full}%wlan0", ("db8",)),
     "IPv4 glued to Arabic": (f"!! تعذّر الاتصال على{v4}", ("192.0.2",)),
     "Windows path glued to Arabic": ("!! الملف فيC:\\Users\\Example Name\\x", ("Example",)),
-    "mixed-language user name in a path": (f"!! saved {fake_home}Sara سارة Example/x/run.log", ("Sara", "سارة", "Example")),
-    "mixed-language Windows user": ("!! C:\\Users\\سارة Example\\run.log", ("سارة", "Example")),
+    "mixed-language user name in a path": (f"!! saved {fake_home}Example مثال Person/x/run.log", ("Example", "مثال", "Person")),
+    "mixed-language Windows user": ("!! C:\\Users\\مثال Example\\run.log", ("مثال", "Example")),
     "URL query token": ("!! GET https://example.com/api/v1/photos?token=abc123SECRET&page=2 failed", ("abc123SECRET",)),
-    "URL fragment and password": ("!! https://sara:hunter2@example.com/x#access_token=zzTOP", ("hunter2", "zzTOP")),
+    "URL fragment and password": ("!! https://example:hunter2@example.com/x#access_token=zzTOP", ("hunter2", "zzTOP")),
     "bare token parameter": ("!! failed with &apikey=k3y-SECRET in the call", ("k3y-SECRET",)),
     "Wi-Fi name after ssid=": ("!! wifi dropped ssid=Example-Home-5G rssi -80", ("Example-Home",)),
     "Wi-Fi name quoted": ("!! TV left the Wi-Fi \"Example Home\" for another", ("Example Home",)),
     "Wi-Fi name in Arabic quotes": ("!! الشبكة: «بيت المثال» ما ردّت  network: «بيت المثال»", ("بيت المثال",)),
+    "email": ("!! mail me at example.person@example.com", ("example.person",)),
+    "serial in a line": ("!! adb device R58M12ABCDE offline", ("R58M12ABCDE",)),
+    "serial in the mDNS name": ("Device: adb-R58M12ABCDE-xyz._adb-tls-connect._tcp", ("R58M12ABCDE",)),
+    "serial property": ("!! ro.serialno=R58M12ABCDE", ("R58M12ABCDE",)),
+    "bearer token": ("!! Authorization: Bearer abcdEFGH12345.secret", ("abcdEFGH",)),
+    "github token": ("!! push failed with ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2", ("a1B2c3",)),
+    "jwt": ("!! got eyJhbGciOi.eyJzdWIiOiIx.sigPART back", ("eyJhbGciOi", "sigPART")),
     "Wi-Fi name after connected to": ("!! TV connected to Example Home 5G but ADB timed out", ("Example Home",)),
 }
 (share.RUN / "run.log").write_text("\n".join(c[0] for c in cases.values()), encoding="utf-8")
@@ -152,10 +159,14 @@ print("share: " + ("IPv6, mixed-language names, URL tokens and Wi-Fi names in !!
 # the machine's own user name goes wherever it appears
 share.own_names = lambda: {"exampleuser"}
 own = share.scrub("copied by ExampleUser to the desktop") == "copied by <user> to the desktop"
+share.own_names = lambda: {"dev", "mac"}   # short names are whole words only: «Device:» and «macOS» stay as they are
+own = own and share.scrub("Device: x, macOS 14, dev ran, عن‌dev") .startswith("Device: x, macOS 14, <user> ran")
+share.own_names = lambda: {"exampleuser"}
 # the allowlist: a line the script does not build is dropped, only the notes and the owner's words are free text
 allow = share.restrict("\n".join(["UrTV problem report, 2026-01-01, UrTV abc", "", "TV: Test TV", "password is 1234",
+                                   "(my wifi password is hunter2)", "? the code is 4321", "(not measured)",
                                    "Checks:", "- ok: x", "Notes from the agent:", "anything the agent says", "From the owner:", "كلامي"]))
-allowed = "password" not in allow and "anything the agent says" in allow and "كلامي" in allow and "- ok: x" in allow
+allowed = "password" not in allow and "hunter2" not in allow and "4321" not in allow and "(not measured)" in allow and "anything the agent says" in allow and "كلامي" in allow and "- ok: x" in allow
 # --send applies it too: a hand-edited file cannot add a field
 share.RUN = Path(tempfile.mkdtemp()); share.OUT = share.RUN / "share.md"
 share.OUT.write_text("UrTV problem report, 2026-01-01, UrTV abc\n\nTV: Test TV\nWi-Fi password hunter2\n", encoding="utf-8")
