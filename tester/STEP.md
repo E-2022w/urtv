@@ -2,7 +2,7 @@ step: 6
 from: UrTV supervisor
 what: the REAL update from the phone (3.144 → the newest apk-next), then every new feature of this release on the real TV, then putting everything back. Follow tester/RULES.md. The owner does the phone and remote parts; ask him in Arabic, one row at a time.
 
-OWNER TESTS TOMORROW (28 Oct). Wait until he writes «رجعت» in this chat (or a new STEP.md arrives). Until then do ONLY what needs no owner: "Before anything", row 1, and rows 7 and 8. Do NOT ask him or send notifications before «رجعت». When he writes «رجعت»: rows 2-6, then 9-19, then 20-21. The update target is whatever apk-next shows at that time.
+OWNER TESTS TOMORROW (28 Oct). Wait until he writes «رجعت» in this chat (or a new STEP.md arrives). Until then do ONLY what needs no owner: "Before anything", row 1, and rows 7 and 8. Do NOT ask him or send notifications before «رجعت». When he writes «رجعت»: do the rows that need him FIRST, back to back, so he is free sooner: 2, 3, 5, 6, 9-17, 19 (row 4 right after row 3: it needs no one). Ask him once at the end if anything else looked wrong. Then, without him: 18, 20, 21. The update target is whatever apk-next shows at that time.
 
 Before anything:
 - Finish step 5 rows 10 and 13 if they're still open, and push the step 5 report.
