@@ -2,7 +2,7 @@ step: 6
 from: UrTV supervisor
 what: the REAL update from the phone (3.144 → 3.145+), the new settings menu, family DNS, phone pairing by typed code, and putting everything back. Follow tester/RULES.md. The owner does the phone and remote parts; ask in Arabic.
 
-OWNER IS OUT until he writes «رجعت» in this chat. Until then do ONLY what needs no owner: the updatechannel next setup, rows 7 (adhkar), 8 (family DNS) and the version checks. Do NOT ask him or send notifications. When he writes «رجعت»: do rows 2 (pairing QR + typed code), 3 (update from the phone to the NEWEST apk-next build, 3.145 or 3.146), 4, 5, 6, then 9-10. The update target is whatever apk-next shows at that time.
+OWNER TESTS TOMORROW (28 Oct). Wait until he writes «رجعت» in this chat (or a new STEP.md arrives). Until then do ONLY what needs no owner: the updatechannel next setup, rows 7 (adhkar), 8 (family DNS) and the version checks. Do NOT ask him or send notifications. When he writes «رجعت»: do rows 2 (pairing QR + typed code), 3 (update from the phone to the NEWEST apk-next build, 3.145 or 3.146), 4, 5, 6, then 9-10. The update target is whatever apk-next shows at that time.
 
 Before anything:
 - Finish step 5 rows 10 and 13 if they're still open, and push the step 5 report.
