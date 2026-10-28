@@ -117,6 +117,7 @@ public class MainActivity extends Activity {
     private int packageSeq;
     private PopupWindow inputsPopup;
     private HomeCard homeCard;
+    private View tvSourceCard; // quick access to TV/HDMI inputs; live preview depends on vendor TV support
     private NowCard nowCard;   // «يُتلى الآن»: at the right end of the pills row while a surah or a station is on
     private Pill sleepPill;   // «مؤقت النوم», with the minutes left while it runs (shown while it has the focus)
     private TextView adhanBar;   // «أذان المغرب بعد ٨ دقائق», over the top edge; while the adhan plays «أذان المغرب · أي زر يوقف الأذان»
@@ -317,6 +318,42 @@ public class MainActivity extends Activity {
             }
         });
         hero.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> homeCard.fit());
+
+     // Quick access to the TV's actual passthrough inputs. Live HDMI preview inside the launcher
+     // is not assumed because it depends on the television manufacturer's system support.
+     LinearLayout sourceCard = new LinearLayout(this);
+     sourceCard.setOrientation(LinearLayout.VERTICAL);
+     sourceCard.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+     sourceCard.setPadding(dp(18), dp(8), dp(18), dp(8));
+     sourceCard.setFocusable(true);
+     sourceCard.setClickable(true);
+     sourceCard.setId(View.generateViewId());
+     GradientDrawable sourceBg = new GradientDrawable();
+     sourceBg.setCornerRadius(dp(16));
+     sourceBg.setColor(0xD91C1C1E);
+     sourceBg.setStroke(dp(1), 0x66DCB86F);
+     sourceCard.setBackground(sourceBg);
+     TextView sourceTitle = text(17, "sans-serif-medium", 0xFFFFE9B8);
+     sourceTitle.setText("التلفزيون والمصادر");
+     sourceTitle.setGravity(Gravity.RIGHT);
+     sourceCard.addView(sourceTitle, new LinearLayout.LayoutParams(-1, -2));
+     TextView sourceSubtitle = text(11, "sans-serif", 0xFFC6BBA4);
+     sourceSubtitle.setText("فتح HDMI وبقية مداخل الشاشة");
+     sourceSubtitle.setGravity(Gravity.RIGHT);
+     sourceCard.addView(sourceSubtitle, new LinearLayout.LayoutParams(-1, -2));
+     sourceCard.setOnClickListener(v -> showInputs(v, ParentalPolicy.PILL_INPUTS));
+     sourceCard.setOnFocusChangeListener((v, focused) -> {
+         sourceBg.setStroke(dp(focused ? 2 : 1), focused ? 0xFFFFE9B8 : 0x66DCB86F);
+         v.animate().scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
+                 .setDuration(180).start();
+         if (focused) {
+             lastFocusedId = v.getId();
+             scroll.smoothScrollTo(0, 0);
+             fadeGlow(0.7f);
+         }
+     });
+     tvSourceCard = sourceCard;
+     hero.addView(sourceCard, lp(dp(461), dp(76), Gravity.LEFT | Gravity.TOP, dp(48), dp(350), 0, 0));
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
@@ -729,7 +766,14 @@ public class MainActivity extends Activity {
             card.setNextFocusLeftId(card.getId());   // nothing beside it to move to: stay on it
             card.setNextFocusRightId(card.getId());
             card.setNextFocusUpId(pills.get(0).getId());   // a pill's own focus moves this to that pill, see pill()
-            card.setNextFocusDownId(dockId != View.NO_ID ? dockId : card.getId());
+            card.setNextFocusDownId(tvSourceCard != null ? tvSourceCard.getId()
+                    : dockId != View.NO_ID ? dockId : card.getId());
+        }
+        if (tvSourceCard != null) {
+            tvSourceCard.setNextFocusUpId(card != null ? card.getId() : pills.get(0).getId());
+            tvSourceCard.setNextFocusDownId(dockId != View.NO_ID ? dockId : tvSourceCard.getId());
+            tvSourceCard.setNextFocusLeftId(tvSourceCard.getId());
+            tvSourceCard.setNextFocusRightId(tvSourceCard.getId());
         }
         for (int i = 0; i < d; i++) {
             View c = dockCards.get(i);
