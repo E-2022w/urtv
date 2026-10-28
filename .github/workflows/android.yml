@@ -1,18 +1,18 @@
 
-name: Build APKs
+name: Build APKs (Test)
 
 on:
+  workflow_dispatch:
   push:
-    branches: [master, next]
+    branches: [master]
     paths:
       - 'src/**'
       - 'assets/**'
       - 'android/**'
       - '.github/workflows/android.yml'
-  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   apk:
@@ -36,81 +36,21 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Signing key
+      - name: Build test APKs
         env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "::error::ANDROID_KEYSTORE_B64 and ANDROID_KEYSTORE_PASSWORD must be configured in repository secrets"
-            exit 1
-          fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
-          echo "ANDROID_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
-
-      - name: Build APKs
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           URTV_BRANCH: ${{ github.ref_name }}
         run: gradle -p android assembleRelease --no-daemon
 
-      - name: Rename APKs
+      - name: Collect APKs
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk urtv-screensaver.apk
-          cp android/launcher/build/outputs/apk/release/launcher-release.apk urtv-home.apk
-          echo "3.${{ github.run_number }}" > version.txt
+          cp android/app/build/outputs/apk/release/app-release.apk urtv-screensaver-test.apk
+          cp android/launcher/build/outputs/apk/release/launcher-release.apk urtv-home-test.apk
 
-      - name: Verify APK signatures
-        run: |
-          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          for f in urtv-screensaver.apk urtv-home.apk; do
-            echo "$f:"
-            "$apksigner" verify --print-certs "$f"
-          done
-
-      - name: Upload APK artifacts
+      - name: Upload test APKs
         uses: actions/upload-artifact@v4
         with:
-          name: apks
+          name: urtv-test-apks
           path: |
-            urtv-screensaver.apk
-            urtv-home.apk
-            version.txt
-
-      - name: Publish latest APKs
-        if: github.ref_name == 'master'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: apk-latest
-          name: Latest APKs
-          body: "Built from ${{ github.sha }}"
-          files: |
-            urtv-screensaver.apk
-            urtv-home.apk
-            version.txt
-          make_latest: true
-
-      - name: Publish numbered release
-        if: github.ref_name == 'master'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v3.${{ github.run_number }}
-          name: UrTV 3.${{ github.run_number }}
-          body: "Built from ${{ github.sha }}"
-          files: |
-            urtv-screensaver.apk
-            urtv-home.apk
-          make_latest: false
-
-      - name: Publish test APKs
-        if: github.ref_name == 'next'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: apk-next
-          name: Test build from next
-          body: "Test build from next at ${{ github.sha }}"
-          files: |
-            urtv-screensaver.apk
-            urtv-home.apk
-          prerelease: true
-          make_latest: false
+            urtv-screensaver-test.apk
+            urtv-home-test.apk
+          retention-days: 7
