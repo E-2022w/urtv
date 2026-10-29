@@ -1441,27 +1441,56 @@ public class MainActivity extends Activity {
      *  explicitly. Try the implicit intent first, then every candidate
      *  activity in the configured live_tv_package, then fall back to the
      *  input picker package. */
-    private void openPassthroughInput(TvInputInfo t) {
-        Intent base = new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(t.getId()));
-        base.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (launch(base)) return;
-        if (liveTvPkg != null && !liveTvPkg.isEmpty() && isInstalled(liveTvPkg)) {
-            // Query every activity in the Live-TV package that advertises VIEW
-            // and try each with the URI, newest APIs first.
-            Intent probe = new Intent(Intent.ACTION_VIEW).setPackage(liveTvPkg);
-            List<ResolveInfo> handlers = getPackageManager().queryIntentActivities(probe,
-                    PackageManager.MATCH_DEFAULT_ONLY);
-            for (ResolveInfo ri : handlers) {
-                Intent explicit = new Intent(Intent.ACTION_VIEW,
-                        TvContract.buildChannelUriForPassthroughInput(t.getId()));
-                explicit.setClassName(ri.activityInfo.packageName, ri.activityInfo.name);
-                explicit.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                if (launch(explicit)) return;
-            }
+    
+private void openPassthroughInput(TvInputInfo t) {
+    if (t == null) return;
+
+    String inputId = t.getId();
+    Uri inputUri = TvContract.buildChannelUriForPassthroughInput(inputId);
+
+    // First: use Android's standard passthrough-input URI.
+    Intent viewIntent = new Intent(Intent.ACTION_VIEW, inputUri);
+    viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+    if (launch(viewIntent)) return;
+
+    // Second: try the configured Live TV app, if available.
+    if (liveTvPkg != null
+            && !liveTvPkg.trim().isEmpty()
+            && isInstalled(liveTvPkg)) {
+
+        Intent probe = new Intent(Intent.ACTION_VIEW)
+                .setPackage(liveTvPkg);
+
+        List<ResolveInfo> handlers =
+                getPackageManager().queryIntentActivities(
+                        probe,
+                        PackageManager.MATCH_DEFAULT_ONLY);
+
+        for (ResolveInfo ri : handlers) {
+            if (ri.activityInfo == null) continue;
+
+            Intent explicit = new Intent(Intent.ACTION_VIEW, inputUri);
+            explicit.setClassName(
+                    ri.activityInfo.packageName,
+                    ri.activityInfo.name);
+            explicit.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            if (launch(explicit)) return;
         }
-        guarded(ParentalPolicy.INPUT_PICKER, inputPickerPkg, "كل المصادر", () -> openPackage(inputPickerPkg));
     }
 
+    // Third: try the configured input picker, if available.
+    if (inputPickerPkg != null
+            && !inputPickerPkg.trim().isEmpty()
+            && isInstalled(inputPickerPkg)) {
+        guarded(
+                ParentalPolicy.INPUT_PICKER,
+                inputPickerPkg,
+                "كل المصادر",
+                () -> openPackage(inputPickerPkg));
+    }
+}
     // ---------------------------------------------------------------- the family lock (Parental)
 
     /**
