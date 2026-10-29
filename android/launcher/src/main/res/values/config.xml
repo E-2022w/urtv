@@ -19,7 +19,7 @@
     </string-array>
 
     <!-- لا نستخدم أسماء تطبيقات TCL على Telezone قبل التحقق منها -->
-    <string name="live_tv_package" translatable="false"></string>
+<string name="live_tv_package" translatable="false">com.cultivaview.livetv</string>
     <string name="input_picker_package" translatable="false"></string>
 
     <integer name="columns">5</integer>
