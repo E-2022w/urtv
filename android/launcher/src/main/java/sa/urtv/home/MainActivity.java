@@ -1452,7 +1452,14 @@ private void openPassthroughInput(TvInputInfo t) {
     Intent viewIntent = new Intent(Intent.ACTION_VIEW, inputUri);
     viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-    if (launch(viewIntent)) return;
+List<ResolveInfo> matches =
+        getPackageManager().queryIntentActivities(
+                viewIntent,
+                PackageManager.MATCH_DEFAULT_ONLY);
+
+if (!matches.isEmpty() && launch(viewIntent)) {
+    return;
+}
 
     // Second: try the configured Live TV app, if available.
     if (liveTvPkg != null
